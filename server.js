@@ -1,12 +1,15 @@
 require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 app.use(express.json());
 app.use('/css', express.static('css', { maxAge: '1h' }));
 app.use('/js', express.static('js', { maxAge: '1h' }));
 app.use('/assets', express.static('assets', { maxAge: '1h' }));
+app.use('/data', express.static('data', { maxAge: '1h' }));
 app.use(express.static('public'));
 
 // Configuracion de la conexion a Supabase (PostgreSQL)
@@ -43,7 +46,13 @@ app.get('/api/state', async (req, res) => {
   try {
     await appStateReady;
     const result = await pool.query('SELECT state, updated_at FROM app_state WHERE id = 1');
-    if (!result.rows[0]) return res.status(404).json({ error: 'Todavía no hay datos compartidos' });
+    if (!result.rows[0]) {
+      const seedPath = path.join(__dirname, 'data', 'products.json');
+      const products = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
+      const categories = [...new Set(products.map(product => product.category).filter(Boolean))]
+        .map((name, index) => ({ id: `cat_${index + 1}`, name }));
+      return res.json({ products, categories, sales: [], purchases: [], customers: [], suppliers: [], cash_movements: [], expenses: [], movements: [], settings: null, inv_counter: 1 });
+    }
     res.json({ ...result.rows[0].state, _updatedAt: result.rows[0].updated_at });
   } catch (err) {
     console.error(err);
@@ -62,7 +71,8 @@ app.post('/api/state', async (req, res) => {
     const currentState = current.rows[0]?.state;
     const incomingHasData = Object.keys(state).some(key => Array.isArray(state[key]) && state[key].length > 0);
     const currentHasData = currentState && Object.keys(currentState).some(key => Array.isArray(currentState[key]) && currentState[key].length > 0);
-    if (!incomingHasData && currentHasData) return res.status(204).end();
+    if (!incomingHasData) return res.status(204).end();
+    if (currentHasData && !state.products?.length && currentState.products?.length) return res.status(204).end();
 
     await pool.query(`
       INSERT INTO app_state (id, state, updated_at) VALUES (1, $1::jsonb, NOW())
