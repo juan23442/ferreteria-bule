@@ -198,7 +198,7 @@ window.Modules.purchases = {
           id: existing?.id || String(remoteProduct.id),
           code,
           name: remoteProduct.name || existing?.name || code,
-          costPrice: Number(remoteProduct.costPrice ?? existing?.costPrice) || 0,
+          costPrice: Number(remoteProduct.costPrice) > 0 ? Number(remoteProduct.costPrice) : (Number(existing?.costPrice) || 0),
           salePrice: Number(remoteProduct.salePrice ?? existing?.salePrice) || 0,
           stock: Number(remoteProduct.stock) || 0,
           minStock: Number(remoteProduct.minStock ?? existing?.minStock) || 3,

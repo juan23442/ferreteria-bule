@@ -17,6 +17,10 @@ const pool = new Pool({
   }
 });
 
+// Conserva el precio de compra que necesita el inventario original.
+pool.query('ALTER TABLE productos ADD COLUMN IF NOT EXISTS costo NUMERIC NOT NULL DEFAULT 0')
+  .catch(err => console.error('No se pudo preparar el costo de productos:', err.message));
+
 // Prueba de conexion a la Base de Datos
 pool.connect((err, client, release) => {
   if (err) {
@@ -42,7 +46,7 @@ app.get('/api/products', async (req, res) => {
   try {
     const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
     const pageSize = Math.min(100, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 50));
-    const result = await pool.query('SELECT id, codigo, nombre, precio, stock FROM productos ORDER BY id ASC');
+    const result = await pool.query('SELECT id, codigo, nombre, precio, stock, costo FROM productos ORDER BY id ASC');
     const query = String(req.query.q || '').trim().toLowerCase();
     const filtered = result.rows.filter(product => !query || `${product.codigo} ${product.nombre}`.toLowerCase().includes(query));
     const start = (page - 1) * pageSize;
@@ -50,7 +54,7 @@ app.get('/api/products', async (req, res) => {
       id: String(product.id),
       code: product.codigo,
       name: product.nombre,
-      costPrice: 0,
+      costPrice: Number(product.costo) || 0,
       salePrice: Number(product.precio) || 0,
       stock: Number(product.stock) || 0,
       minStock: 3,
@@ -68,12 +72,13 @@ app.get('/api/products/summary', async (req, res) => {
     const result = await pool.query(`
       SELECT
         COUNT(*)::int AS total,
+        COALESCE(SUM(costo * stock), 0)::numeric AS cost,
         COALESCE(SUM(precio * stock), 0)::numeric AS sale,
         COUNT(*) FILTER (WHERE stock <= 0)::int AS "outStock",
         COUNT(*) FILTER (WHERE stock > 0 AND stock <= 3)::int AS "lowStock"
       FROM productos
     `);
-    res.json({ cost: 0, sale: Number(result.rows[0].sale) || 0, ...result.rows[0] });
+    res.json({ ...result.rows[0], cost: Number(result.rows[0].cost) || 0, sale: Number(result.rows[0].sale) || 0 });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -85,14 +90,15 @@ app.post('/api/productos', async (req, res) => {
   const codigo = req.body.codigo ?? req.body.code;
   const nombre = req.body.nombre ?? req.body.name;
   const precio = req.body.precio ?? req.body.salePrice;
+  const costo = req.body.costo ?? req.body.costPrice;
   const stock = req.body.stock;
   try {
     if (!codigo || !nombre || !Number.isFinite(Number(precio)) || !Number.isFinite(Number(stock))) {
       return res.status(400).json({ error: 'Código, nombre, precio y stock son obligatorios' });
     }
     const result = await pool.query(
-      'INSERT INTO productos (codigo, nombre, precio, stock) VALUES ($1, $2, $3, $4) RETURNING *',
-      [codigo, nombre, Number(precio), Number(stock)]
+      'INSERT INTO productos (codigo, nombre, precio, stock, costo) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [codigo, nombre, Number(precio), Number(stock), Number(costo) || 0]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -106,14 +112,15 @@ app.put('/api/productos/:id', async (req, res) => {
   const codigo = req.body.codigo ?? req.body.code;
   const nombre = req.body.nombre ?? req.body.name;
   const precio = req.body.precio ?? req.body.salePrice;
+  const costo = req.body.costo ?? req.body.costPrice;
   const stock = req.body.stock;
   try {
     if (!codigo || !nombre || !Number.isFinite(Number(precio)) || !Number.isFinite(Number(stock))) {
       return res.status(400).json({ error: 'Código, nombre, precio y stock son obligatorios' });
     }
     const result = await pool.query(
-      'UPDATE productos SET codigo = $1, nombre = $2, precio = $3, stock = $4 WHERE id::text = $5 OR codigo = $5 RETURNING *',
-      [codigo, nombre, Number(precio), Number(stock), id]
+      'UPDATE productos SET codigo = $1, nombre = $2, precio = $3, stock = $4, costo = $5 WHERE id::text = $6 OR codigo = $6 RETURNING *',
+      [codigo, nombre, Number(precio), Number(stock), Number(costo) || 0, id]
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Producto no encontrado' });
     res.json(result.rows[0]);

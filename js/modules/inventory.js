@@ -235,12 +235,14 @@ window.Modules.inventory = {
   },
 
   _renderSummary(summary) {
+    const localProducts = DB.getAll('products');
+    const localCost = localProducts.reduce((sum, product) => sum + (Number(product.costPrice) || 0) * (Number(product.stock) || 0), 0);
     const total = document.getElementById('inv-total-count');
     const cost = document.getElementById('inv-cost-total');
     const sale = document.getElementById('inv-sale-total');
     const alerts = document.getElementById('inv-alert-count');
     if (total) total.textContent = Number(summary.total || 0).toLocaleString('es-CO');
-    if (cost) cost.textContent = Utils.formatCurrency(summary.cost || 0);
+    if (cost) cost.textContent = Utils.formatCurrency(Number(summary.cost) || localCost);
     if (sale) sale.textContent = Utils.formatCurrency(summary.sale || 0);
     if (alerts) alerts.textContent = (Number(summary.lowStock || 0) + Number(summary.outStock || 0)).toLocaleString('es-CO');
   },
@@ -320,7 +322,18 @@ window.Modules.inventory = {
   _renderProductPage(result) {
     const tbody = document.getElementById('inv-tbody');
     if (!tbody) return;
-    const pageItems = result.items || [];
+    const localByCode = new Map(DB.getAll('products').map(product => [String(product.code || '').trim().toLowerCase(), product]));
+    const pageItems = (result.items || []).map(remoteProduct => {
+      const localProduct = localByCode.get(String(remoteProduct.code || '').trim().toLowerCase());
+      return localProduct ? {
+        ...remoteProduct,
+        ...localProduct,
+        costPrice: Number(remoteProduct.costPrice) > 0 ? Number(remoteProduct.costPrice) : (Number(localProduct.costPrice) || 0),
+        salePrice: Number(remoteProduct.salePrice) || Number(localProduct.salePrice) || 0,
+        stock: Number(remoteProduct.stock) || 0,
+        id: remoteProduct.id
+      } : remoteProduct;
+    });
     const totalItems = result.total || 0;
     const totalPages = result.pages || Math.ceil(totalItems / this._pageSize) || 1;
 
