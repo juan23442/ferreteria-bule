@@ -167,7 +167,8 @@ const DB = (() => {
       const response = await fetch(`/api/products?${params}`);
       if (!response.ok) throw new Error(`Consulta de productos falló (${response.status})`);
       const result = await response.json();
-      if (result.items?.length || !this.getAll('products').length) return result;
+      const localProducts = this.getAll('products');
+      if (result.total >= localProducts.length || !localProducts.length) return result;
 
       const query = String(options.query || '').trim().toLowerCase();
       const products = this.getAll('products').filter(product => {
@@ -199,7 +200,7 @@ const DB = (() => {
       if (!response.ok) throw new Error(`Resumen de productos falló (${response.status})`);
       const result = await response.json();
       const products = this.getAll('products');
-      if (Number(result.total) || !products.length) return result;
+      if (Number(result.total) >= products.length || !products.length) return result;
       return {
         total: products.length,
         cost: products.reduce((sum, product) => sum + (Number(product.costPrice) || 0) * (Number(product.stock) || 0), 0),
