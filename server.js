@@ -4,6 +4,7 @@ const { Pool } = require('pg');
 
 const app = express();
 app.use(express.json());
+app.use(express.static('public'));
 
 // Configuracion de la conexion a Supabase (PostgreSQL)
 const pool = new Pool({
