@@ -2,46 +2,111 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Ferretería El Bule - Inventario</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ferretería El Bule - Sistema de Gestión</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 30px; background: #f4f4f9; }
-    h1 { color: #333; }
-    form { background: #fff; padding: 15px; border-radius: 5px; margin-bottom: 20px; display: flex; gap: 10px; }
-    input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
-    button { padding: 8px 15px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
-    table { width: 100%; border-collapse: collapse; background: #fff; }
-    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-    th { background: #007bff; color: white; }
-    .btn-delete { background: #dc3545; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { display: flex; height: 100vh; background-color: #f4f6f9; }
+
+    /* Sidebar */
+    .sidebar { width: 250px; background-color: #0b1a30; color: #fff; display: flex; flex-direction: column; padding: 20px 0; }
+    .sidebar h2 { font-size: 14px; text-transform: uppercase; color: #6c7a91; padding: 0 20px; margin-bottom: 10px; }
+    .menu-item { padding: 12px 20px; color: #a0aec0; text-decoration: none; display: flex; align-items: center; gap: 10px; font-weight: 500; cursor: pointer; }
+    .menu-item:hover, .menu-item.active { background-color: #1a365d; color: #fff; border-left: 4px solid #3182ce; }
+
+    /* Main Content */
+    .main-content { flex: 1; padding: 30px; overflow-y: auto; }
+    .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 20px; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+
+    /* Forms & Tables */
+    .form-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px; }
+    input, select { width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 6px; }
+    button { padding: 10px 20px; background-color: #3182ce; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    button:hover { background-color: #2b6cb0; }
+
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { text-align: left; padding: 12px; border-bottom: 1px solid #e2e8f0; }
+    th { background-color: #edf2f7; color: #2d3748; }
+    .btn-delete { background-color: #e53e3e; padding: 6px 12px; }
   </style>
 </head>
 <body>
 
-  <h1>Inventario - Ferretería El Bule</h1>
+  <!-- Navegación Lateral -->
+  <div class="sidebar">
+    <h2>Operaciones</h2>
+    <a class="menu-item" onclick="mostrarSeccion('ventas')">🛒 Ventas</a>
+    <a class="menu-item" onclick="mostrarSeccion('facturacion')">📄 Facturación</a>
+    <a class="menu-item active" onclick="mostrarSeccion('inventario')">📦 Inventario</a>
+    <a class="menu-item" onclick="mostrarSeccion('compras')">📥 Compras</a>
+    <a class="menu-item" onclick="mostrarSeccion('clientes')">👥 Clientes</a>
+    <a class="menu-item" onclick="mostrarSeccion('proveedores')">🤝 Proveedores</a>
 
-  <form id="productForm">
-    <input type="text" id="codigo" placeholder="Código" required>
-    <input type="text" id="nombre" placeholder="Nombre" required>
-    <input type="number" step="0.01" id="precio" placeholder="Precio" required>
-    <input type="number" id="stock" placeholder="Stock" required>
-    <button type="submit">Agregar</button>
-  </form>
+    <h2 style="margin-top: 20px;">Finanzas</h2>
+    <a class="menu-item" onclick="mostrarSeccion('caja')">💰 Caja</a>
+    <a class="menu-item" onclick="mostrarSeccion('gastos')">💸 Gastos</a>
+  </div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Código</th>
-        <th>Nombre</th>
-        <th>Precio</th>
-        <th>Stock</th>
-        <th>Acciones</th>
-      </tr>
-    </thead>
-    <tbody id="tablaProductos"></tbody>
-  </table>
+  <!-- Contenido Principal -->
+  <div class="main-content">
+
+    <!-- Sección Inventario -->
+    <div id="sec-inventario" class="seccion">
+      <div class="card">
+        <h2>Gestión de Inventario</h2>
+        <form id="productForm" style="margin-top: 15px;">
+          <div class="form-group">
+            <input type="text" id="codigo" placeholder="Código" required>
+            <input type="text" id="nombre" placeholder="Nombre" required>
+            <input type="number" step="0.01" id="precio" placeholder="Precio ($ COP)" required>
+            <input type="number" id="stock" placeholder="Stock Inicial" required>
+          </div>
+          <button type="submit">Guardar Producto</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Lista de Productos</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Nombre</th>
+              <th>Precio</th>
+              <th>Stock</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tablaProductos"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Sección Compras -->
+    <div id="sec-compras" class="seccion" style="display:none;">
+      <div class="card">
+        <h2>📦 Nueva Compra a Proveedor</h2>
+        <div class="form-group" style="margin-top: 15px;">
+          <input type="text" placeholder="Proveedor *">
+          <input type="date">
+        </div>
+        <p style="background: #ebf8ff; color: #2b6cb0; padding: 10px; border-radius: 6px; font-size: 14px;">
+          ⚖️ <strong>Control de lotes activo:</strong> cada compra conserva su costo y cantidad como un lote independiente.
+        </p>
+      </div>
+    </div>
+
+  </div>
 
   <script>
     const API_URL = '/api/productos';
+
+    function mostrarSeccion(nombre) {
+      document.querySelectorAll('.seccion').forEach(s => s.style.display = 'none');
+      const objetivo = document.getElementById(`sec-${nombre}`);
+      if (objetivo) objetivo.style.display = 'block';
+    }
 
     async function cargarProductos() {
       const res = await fetch(API_URL);
@@ -53,7 +118,7 @@
           <tr>
             <td>${p.codigo}</td>
             <td>${p.nombre}</td>
-            <td>$${p.precio}</td>
+            <td>$${parseFloat(p.precio).toLocaleString('es-CO')}</td>
             <td>${p.stock}</td>
             <td><button class="btn-delete" onclick="eliminarProducto(${p.id})">Eliminar</button></td>
           </tr>
