@@ -103,12 +103,19 @@ app.post('/api/productos', async (req, res) => {
 // Actualizar un producto existente
 app.put('/api/productos/:id', async (req, res) => {
   const { id } = req.params;
-  const { codigo, nombre, precio, stock } = req.body;
+  const codigo = req.body.codigo ?? req.body.code;
+  const nombre = req.body.nombre ?? req.body.name;
+  const precio = req.body.precio ?? req.body.salePrice;
+  const stock = req.body.stock;
   try {
+    if (!codigo || !nombre || !Number.isFinite(Number(precio)) || !Number.isFinite(Number(stock))) {
+      return res.status(400).json({ error: 'Código, nombre, precio y stock son obligatorios' });
+    }
     const result = await pool.query(
-      'UPDATE productos SET codigo = $1, nombre = $2, precio = $3, stock = $4 WHERE id = $5 RETURNING *',
-      [codigo, nombre, precio, stock, id]
+      'UPDATE productos SET codigo = $1, nombre = $2, precio = $3, stock = $4 WHERE id::text = $5 OR codigo = $5 RETURNING *',
+      [codigo, nombre, Number(precio), Number(stock), id]
     );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Producto no encontrado' });
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });

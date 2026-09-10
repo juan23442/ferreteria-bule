@@ -453,6 +453,14 @@ window.Modules.inventory = {
     try {
       if (this._editId) {
         const old = DB.findById('products', this._editId);
+        if (!old) throw new Error('No se encontró el producto que deseas editar');
+        const response = await fetch(`/api/productos/${encodeURIComponent(old.code)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || 'No se pudo actualizar el producto en Supabase');
         DB.update('products', this._editId, data);
         if (old && old.stock !== data.stock) {
           DB.logMovement({ productId: this._editId, productName: data.name, qty: Math.abs(data.stock - old.stock), type: 'Ajuste Stock', reason: 'Edición directa de producto', value: data.salePrice });
