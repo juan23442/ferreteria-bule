@@ -37,6 +37,49 @@ app.get('/api/productos', async (req, res) => {
   }
 });
 
+// Compatibilidad con los módulos de la aplicación original.
+app.get('/api/products', async (req, res) => {
+  try {
+    const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 50));
+    const result = await pool.query('SELECT id, codigo, nombre, precio, stock FROM productos ORDER BY id ASC');
+    const query = String(req.query.q || '').trim().toLowerCase();
+    const filtered = result.rows.filter(product => !query || `${product.codigo} ${product.nombre}`.toLowerCase().includes(query));
+    const start = (page - 1) * pageSize;
+    const items = filtered.slice(start, start + pageSize).map(product => ({
+      id: String(product.id),
+      code: product.codigo,
+      name: product.nombre,
+      costPrice: 0,
+      salePrice: Number(product.precio) || 0,
+      stock: Number(product.stock) || 0,
+      minStock: 3,
+      active: true
+    }));
+    res.json({ items, total: filtered.length, page, pageSize, pages: Math.max(1, Math.ceil(filtered.length / pageSize)) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/products/summary', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        COUNT(*)::int AS total,
+        COALESCE(SUM(precio * stock), 0)::numeric AS sale,
+        COUNT(*) FILTER (WHERE stock <= 0)::int AS "outStock",
+        COUNT(*) FILTER (WHERE stock > 0 AND stock <= 3)::int AS "lowStock"
+      FROM productos
+    `);
+    res.json({ cost: 0, sale: Number(result.rows[0].sale) || 0, ...result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Crear un nuevo producto
 app.post('/api/productos', async (req, res) => {
   const codigo = req.body.codigo ?? req.body.code;
