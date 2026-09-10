@@ -453,6 +453,22 @@ const DB = (() => {
         const remoteResponse = await fetch('/api/state', { cache: 'no-store' });
         if (remoteResponse.ok) {
           const remoteState = await remoteResponse.json();
+          const localProducts = this.getAll('products');
+          const remoteProducts = Array.isArray(remoteState.products) ? remoteState.products : [];
+          const remoteHasData = remoteProducts.length > 0 || KEYS.some(key => key !== 'products' && key !== 'categories' && Array.isArray(remoteState[key]) && remoteState[key].length > 0);
+          if (!remoteHasData) throw new Error('El estado compartido está vacío');
+          if (localProducts.length > remoteProducts.length) {
+            const remoteById = new Map(remoteProducts.map(product => [product.id, product]));
+            localProducts.forEach(product => remoteById.set(product.id, product));
+            remoteState.products = [...remoteById.values()];
+            this.importAll(remoteState);
+            await fetch('/api/state', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.exportAll())
+            });
+            return;
+          }
           _syncing = true;
           this.importAll(remoteState);
           _syncing = false;

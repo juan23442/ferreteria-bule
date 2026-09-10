@@ -1,11 +1,9 @@
 require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
-const fs = require('fs');
-const path = require('path');
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use('/css', express.static('css', { maxAge: '1h' }));
 app.use('/js', express.static('js', { maxAge: '1h' }));
 app.use('/assets', express.static('assets', { maxAge: '1h' }));
@@ -47,13 +45,12 @@ app.get('/api/state', async (req, res) => {
     await appStateReady;
     const result = await pool.query('SELECT state, updated_at FROM app_state WHERE id = 1');
     if (!result.rows[0]) {
-      const seedPath = path.join(__dirname, 'data', 'products.json');
-      const products = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
-      const categories = [...new Set(products.map(product => product.category).filter(Boolean))]
-        .map((name, index) => ({ id: `cat_${index + 1}`, name }));
-      return res.json({ products, categories, sales: [], purchases: [], customers: [], suppliers: [], cash_movements: [], expenses: [], movements: [], settings: null, inv_counter: 1 });
+      return res.status(404).json({ error: 'Todavía no hay datos compartidos' });
     }
-    res.json({ ...result.rows[0].state, _updatedAt: result.rows[0].updated_at });
+    const state = result.rows[0].state;
+    const hasData = Object.keys(state).some(key => key !== 'categories' && Array.isArray(state[key]) && state[key].length > 0);
+    if (!hasData) return res.status(404).json({ error: 'Todavía no hay datos compartidos' });
+    res.json({ ...state, _updatedAt: result.rows[0].updated_at });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'No se pudo leer el estado compartido' });
