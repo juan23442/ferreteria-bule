@@ -4,9 +4,9 @@ const { Pool } = require('pg');
 
 const app = express();
 app.use(express.json());
-app.use('/css', express.static('css'));
-app.use('/js', express.static('js'));
-app.use('/assets', express.static('assets'));
+app.use('/css', express.static('css', { maxAge: '1h' }));
+app.use('/js', express.static('js', { maxAge: '1h' }));
+app.use('/assets', express.static('assets', { maxAge: '1h' }));
 app.use(express.static('public'));
 
 // Configuracion de la conexion a Supabase (PostgreSQL)

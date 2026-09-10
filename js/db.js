@@ -395,17 +395,20 @@ const DB = (() => {
 
     // ---- Seed & Migrate Existing Data ----
     async seed() {
-      try {
-        const response = await fetch('data/products.json', { cache: 'no-store' });
-        if (response.ok) {
-          const seedProducts = await response.json();
-          const currentProducts = this.getAll('products');
-          const currentIds = new Set(currentProducts.map(product => product.id));
-          const missingProducts = seedProducts.filter(product => !currentIds.has(product.id));
-          if (missingProducts.length) this.save('products', currentProducts.concat(missingProducts));
+      const currentProducts = this.getAll('products');
+      // El catálogo inicial es grande; solo cargarlo cuando el navegador todavía no tiene productos.
+      if (currentProducts.length === 0) {
+        try {
+          const response = await fetch('data/products.json', { cache: 'no-store' });
+          if (response.ok) {
+            const seedProducts = await response.json();
+            const currentIds = new Set(currentProducts.map(product => product.id));
+            const missingProducts = seedProducts.filter(product => !currentIds.has(product.id));
+            if (missingProducts.length) this.save('products', currentProducts.concat(missingProducts));
+          }
+        } catch (error) {
+          console.warn('No se pudo cargar el inventario inicial:', error.message);
         }
-      } catch (error) {
-        console.warn('No se pudo cargar el inventario inicial:', error.message);
       }
 
       if (!this.getAll('categories').length) {
