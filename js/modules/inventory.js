@@ -172,11 +172,17 @@ window.Modules.inventory = {
     this._pageSize = parseInt(document.getElementById('inv-page-size')?.value || 15);
     this._renderTable();
     DB.productSummary().then(summary => {
-      document.getElementById('inv-total-count').textContent = Number(summary.total).toLocaleString('es-CO');
-      document.getElementById('inv-cost-total').textContent = Utils.formatCurrency(summary.cost);
-      document.getElementById('inv-sale-total').textContent = Utils.formatCurrency(summary.sale);
-      document.getElementById('inv-alert-count').textContent = (Number(summary.lowStock) + Number(summary.outStock)).toLocaleString('es-CO');
-    }).catch(() => {});
+      this._renderSummary(summary);
+    }).catch(() => {
+      const products = DB.getAll('products');
+      this._renderSummary({
+        total: products.length,
+        cost: products.reduce((sum, product) => sum + (Number(product.costPrice) || 0) * (Number(product.stock) || 0), 0),
+        sale: products.reduce((sum, product) => sum + (Number(product.salePrice) || 0) * (Number(product.stock) || 0), 0),
+        lowStock: products.filter(product => Number(product.stock) > 0 && Number(product.stock) <= (Number(product.minStock) || 3)).length,
+        outStock: products.filter(product => Number(product.stock) <= 0).length
+      });
+    });
 
     // Detección Inmediata de Código Duplicado al Escribir
     const codeInput = document.getElementById('prod-code');
@@ -226,6 +232,17 @@ window.Modules.inventory = {
     });
 
     document.getElementById('btn-export-inv').addEventListener('click', () => self._export());
+  },
+
+  _renderSummary(summary) {
+    const total = document.getElementById('inv-total-count');
+    const cost = document.getElementById('inv-cost-total');
+    const sale = document.getElementById('inv-sale-total');
+    const alerts = document.getElementById('inv-alert-count');
+    if (total) total.textContent = Number(summary.total || 0).toLocaleString('es-CO');
+    if (cost) cost.textContent = Utils.formatCurrency(summary.cost || 0);
+    if (sale) sale.textContent = Utils.formatCurrency(summary.sale || 0);
+    if (alerts) alerts.textContent = (Number(summary.lowStock || 0) + Number(summary.outStock || 0)).toLocaleString('es-CO');
   },
 
   _validateCodeLive() {
