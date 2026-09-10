@@ -156,9 +156,10 @@ window.Modules.expenses = {
     if (!desc) { Utils.showToast('La descripción del gasto es obligatoria', 'error'); return; }
     if (!Number.isFinite(amount) || amount <= 0) { Utils.showToast('El monto debe ser mayor a 0', 'error'); return; }
 
+    const expenseId = Utils.generateId('exp');
     try {
-      DB.add('expenses', { id: Utils.generateId('exp'), date, category, description: desc, amount, createdAt: Utils.nowISO() });
-      DB.add('cash_movements', { id: Utils.generateId('cash'), date, datetime: Utils.nowISO(), type: 'egreso', concept: `Gasto: ${desc}`, amount });
+      DB.add('expenses', { id: expenseId, date, category, description: desc, amount, createdAt: Utils.nowISO() });
+      DB.add('cash_movements', { id: Utils.generateId('cash'), expenseId, date, datetime: Utils.nowISO(), type: 'egreso', concept: `Gasto: ${desc}`, amount });
     } catch (error) {
       console.error('No se pudo guardar el gasto:', error);
       Utils.showToast('No se pudo guardar el gasto. Intenta nuevamente.', 'error');
@@ -176,7 +177,23 @@ window.Modules.expenses = {
 
   _del(id) {
     if (!Utils.confirm('¿Eliminar este gasto registrado?')) return;
+    const expense = DB.findById('expenses', id) || DB.getAll('expenses').find(item => item.id === id);
     DB.delete('expenses', id);
+
+    if (expense) {
+      const cashMovements = DB.getAll('cash_movements');
+      const linkedIndex = cashMovements.findIndex(movement => movement.expenseId === id);
+      if (linkedIndex !== -1) cashMovements.splice(linkedIndex, 1);
+      else {
+        const legacyIndex = cashMovements.findIndex(movement => movement.type === 'egreso' &&
+          movement.concept === `Gasto: ${expense.description}` &&
+          movement.date === expense.date && Number(movement.amount) === Number(expense.amount));
+        if (legacyIndex !== -1) cashMovements.splice(legacyIndex, 1);
+      }
+      DB.save('cash_movements', cashMovements);
+    }
+
+    DB.cleanupOrphanExpenseMovements();
     Utils.showToast('Gasto eliminado', 'success');
     this._renderTable();
   },

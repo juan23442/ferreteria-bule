@@ -30,4 +30,14 @@ test('Debe guardar un gasto y sincronizarlo con el estado compartido', async ({ 
   await expect.poll(() => syncedStates.some(state =>
     Array.isArray(state.expenses) && state.expenses.some((expense: any) => expense.description === 'Pago de prueba')
   )).toBe(true);
+
+  await page.once('dialog', dialog => dialog.accept());
+  await page.locator('#exp-tbody button').click();
+  await expect(page.locator('#exp-tbody')).not.toContainText('Pago de prueba');
+  await expect.poll(() => syncedStates.some(state =>
+    Array.isArray(state.expenses) &&
+    !state.expenses.some((expense: any) => expense.description === 'Pago de prueba') &&
+    Array.isArray(state.cash_movements) &&
+    !state.cash_movements.some((movement: any) => movement.concept === 'Gasto: Pago de prueba')
+  )).toBe(true);
 });

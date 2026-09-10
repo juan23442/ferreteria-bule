@@ -309,6 +309,21 @@ const DB = (() => {
       return movs.reduce((acc, m) => acc + (m.type === 'ingreso' ? m.amount : -m.amount), 0);
     },
 
+    cleanupOrphanExpenseMovements() {
+      const expenses = this.getAll('expenses');
+      const expenseIds = new Set(expenses.map(expense => expense.id));
+      const validExpenseMovements = new Set(expenses.map(expense =>
+        `${expense.date}|${expense.description}|${Number(expense.amount)}`
+      ));
+      const movements = this.getAll('cash_movements');
+      const cleanedMovements = movements.filter(movement => {
+        if (movement.type !== 'egreso' || !String(movement.concept || '').startsWith('Gasto:')) return true;
+        if (movement.expenseId) return expenseIds.has(movement.expenseId);
+        return validExpenseMovements.has(`${movement.date}|${String(movement.concept).slice(7)}|${Number(movement.amount)}`);
+      });
+      if (cleanedMovements.length !== movements.length) this.save('cash_movements', cleanedMovements);
+    },
+
     // ---- Audit Stock Movement Log ----
     logMovement({ productId, productName, qty, type, reason, user = 'Sistema', value = 0 }) {
       const movement = {
@@ -463,6 +478,7 @@ const DB = (() => {
             localProducts.forEach(product => remoteById.set(product.id, product));
             remoteState.products = [...remoteById.values()];
             this.importAll(remoteState);
+            this.cleanupOrphanExpenseMovements();
             await fetch('/api/state', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -473,6 +489,7 @@ const DB = (() => {
           _syncing = true;
           this.importAll(remoteState);
           _syncing = false;
+          this.cleanupOrphanExpenseMovements();
           return;
         }
       } catch (error) {
@@ -501,6 +518,8 @@ const DB = (() => {
           .map((name, i) => ({ id: `cat_${i + 1}`, name }));
         this.save('categories', categories);
       }
+
+      this.cleanupOrphanExpenseMovements();
 
       // Migrate products
       const products = this.getAll('products');
