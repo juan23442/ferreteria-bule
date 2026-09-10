@@ -137,16 +137,33 @@ window.Modules.expenses = {
   },
 
   _save() {
-    const desc = document.getElementById('exp-desc').value.trim();
-    const amount = parseFloat(document.getElementById('exp-amount').value);
+    const dateInput = document.getElementById('exp-date');
+    const categoryInput = document.getElementById('exp-category');
+    const descInput = document.getElementById('exp-desc');
+    const amountInput = document.getElementById('exp-amount');
+    if (!dateInput || !categoryInput || !descInput || !amountInput) {
+      Utils.showToast('No se pudo cargar el formulario de gastos', 'error');
+      return;
+    }
+
+    const date = dateInput.value || Utils.today();
+    const category = categoryInput.value.trim();
+    const desc = descInput.value.trim();
+    const amount = Number.parseFloat(amountInput.value);
+
+    if (!date) { Utils.showToast('La fecha del gasto es obligatoria', 'error'); return; }
+    if (!category) { Utils.showToast('La categoría del gasto es obligatoria', 'error'); return; }
     if (!desc) { Utils.showToast('La descripción del gasto es obligatoria', 'error'); return; }
-    if (!amount || amount <= 0) { Utils.showToast('El monto debe ser mayor a 0', 'error'); return; }
+    if (!Number.isFinite(amount) || amount <= 0) { Utils.showToast('El monto debe ser mayor a 0', 'error'); return; }
 
-    const date = document.getElementById('exp-date').value || Utils.today();
-    const category = document.getElementById('exp-category').value;
-
-    DB.add('expenses', { id: Utils.generateId('exp'), date, category, description: desc, amount, createdAt: Utils.nowISO() });
-    DB.add('cash_movements', { id: Utils.generateId('cash'), date, datetime: Utils.nowISO(), type: 'egreso', concept: `Gasto: ${desc}`, amount });
+    try {
+      DB.add('expenses', { id: Utils.generateId('exp'), date, category, description: desc, amount, createdAt: Utils.nowISO() });
+      DB.add('cash_movements', { id: Utils.generateId('cash'), date, datetime: Utils.nowISO(), type: 'egreso', concept: `Gasto: ${desc}`, amount });
+    } catch (error) {
+      console.error('No se pudo guardar el gasto:', error);
+      Utils.showToast('No se pudo guardar el gasto. Intenta nuevamente.', 'error');
+      return;
+    }
 
     Utils.showToast('Gasto operativo registrado', 'success');
     Utils.closeModal('expenseModal');
