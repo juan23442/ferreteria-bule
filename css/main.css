@@ -471,6 +471,9 @@ body {
 
 .table td.muted { color: var(--text-muted); }
 .table .actions { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
+.table th:last-child,
+.table td:last-child { position: sticky; right: 0; background: var(--bg-card); z-index: 1; }
+.table th:last-child { background: var(--bg-card-hover); }
 
 /* ── Insignias Badge ── */
 .badge {
