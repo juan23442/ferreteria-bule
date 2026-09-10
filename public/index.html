@@ -154,5 +154,29 @@
 
     cargarProductos();
   </script>
+
+  <script>
+    // Función para cambiar de sección al hacer clic en el menú
+    function navegar(seccion) {
+      // Ocultar todas las secciones
+      document.querySelectorAll('.seccion').forEach(div => div.style.display = 'none');
+
+      // Mostrar la sección seleccionada
+      const activa = document.getElementById(`sec-${seccion}`);
+      if (activa) activa.style.display = 'block';
+    }
+
+    // Eventos para el menú lateral
+    document.querySelectorAll('.sidebar a').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const texto = e.target.textContent.toLowerCase();
+        if (texto.includes('ventas')) navegar('ventas');
+        if (texto.includes('inventario')) navegar('inventario');
+        if (texto.includes('compras')) navegar('compras');
+        if (texto.includes('facturación')) navegar('facturacion');
+      });
+    });
+  </script>
 </body>
 </html>
