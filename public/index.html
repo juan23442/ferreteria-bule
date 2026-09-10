@@ -6,33 +6,57 @@
   <title>Ferretería El Bule - Sistema de Gestión</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, sans-serif; }
-    :root { --navy: #0b1a30; --blue: #3182ce; --ink: #24344d; --muted: #66758a; --line: #e2e8f0; }
-    body { display: flex; min-height: 100vh; background: #f4f6f9; color: var(--ink); }
-    .sidebar { width: 250px; flex: 0 0 250px; min-height: 100vh; background: var(--navy); color: #fff; padding: 22px 0; }
-    .brand { padding: 0 20px 24px; border-bottom: 1px solid #223451; margin-bottom: 20px; }
-    .brand strong { display: block; font-size: 17px; letter-spacing: .4px; }
-    .brand span { color: #9aa9bf; font-size: 12px; }
-    .sidebar h2 { color: #6c7a91; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; padding: 0 20px; margin: 18px 0 8px; }
-    .menu-item { width: 100%; border: 0; border-left: 4px solid transparent; background: transparent; color: #a0aec0; cursor: pointer; display: flex; gap: 10px; padding: 12px 20px; text-align: left; font-size: 14px; font-weight: 600; }
-    .menu-item:hover, .menu-item.active { background: #1a365d; border-left-color: var(--blue); color: #fff; }
-    .main-content { flex: 1; min-width: 0; padding: 30px; overflow: auto; }
-    .page-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 22px; }
-    .page-heading h1 { font-size: 26px; }
-    .page-heading p { color: var(--muted); margin-top: 5px; }
-    .card { background: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(24, 39, 75, .06); padding: 22px; margin-bottom: 20px; }
+    :root { --navy: #061e47; --blue: #2563eb; --blue-dark: #1d4ed8; --ink: #0f172a; --muted: #94a3b8; --line: #e2e8f0; --card: #fff; --bg: #f4f6fb; --orange: #f59e0b; --radius: 12px; }
+    body { display: flex; min-height: 100vh; background: var(--bg); color: var(--ink); line-height: 1.5; }
+    .sidebar { width: 270px; flex: 0 0 270px; min-height: 100vh; background: var(--navy); border-right: 1px solid rgba(255,255,255,.08); color: #fff; display: flex; flex-direction: column; padding: 0; box-shadow: 4px 0 20px rgba(0,0,0,.15); }
+    .brand { min-height: 72px; padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,.08); display: flex; align-items: center; gap: 12px; }
+    .brand-logo { width: 44px; height: 44px; flex: 0 0 44px; display: grid; place-items: center; border-radius: 12px; background: var(--orange); box-shadow: 0 4px 12px rgba(245,158,11,.3); font-size: 23px; }
+    .brand strong { display: block; color: #fff; font-size: 13px; font-weight: 900; letter-spacing: .5px; line-height: 1.2; }
+    .brand span { color: #fbbf24; font-size: 11px; font-weight: 700; }
+    .sidebar h2 { color: #5b7bb2; font-size: 10px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; padding: 0 32px; margin: 18px 0 6px; }
+    .sidebar nav { padding: 0 12px; }
+    .menu-item { width: 100%; border: 0; border-radius: var(--radius); background: transparent; color: #b0c4de; cursor: pointer; display: flex; gap: 12px; align-items: center; margin-bottom: 3px; padding: 11px 14px; text-align: left; font-size: 13.5px; font-weight: 600; transition: .2s ease; }
+    .menu-item:hover { background: rgba(255,255,255,.08); color: #fff; transform: translateX(3px); }
+    .menu-item.active { background: var(--blue); color: #fff; font-weight: 700; box-shadow: 0 4px 14px rgba(37,99,235,.35); }
+    .main-content { flex: 1; min-width: 0; padding: 0 30px 30px; overflow: auto; }
+    .page-heading { min-height: 96px; display: flex; justify-content: space-between; align-items: center; gap: 16px; margin: 0 -30px 24px; padding: 0 30px; background: #fff; border-bottom: 1px solid var(--line); box-shadow: 0 2px 12px rgba(0,0,0,.04); }
+    .page-heading h1 { font-size: 27px; font-weight: 800; letter-spacing: -.4px; }
+    .page-heading p { color: var(--muted); font-size: 15px; font-weight: 600; margin-top: 2px; }
+    #current-date { color: var(--muted); font-size: 13px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 2px 12px rgba(0,0,0,.04); padding: 22px; margin-bottom: 20px; }
     .card h2, .card h3 { margin-bottom: 16px; }
     .form-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 16px; }
     label { color: var(--muted); display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
     input, select, textarea { border: 1px solid #cbd5e0; border-radius: 6px; padding: 10px; width: 100%; }
     textarea { min-height: 86px; resize: vertical; }
-    button { background: var(--blue); border: 0; border-radius: 6px; color: #fff; cursor: pointer; font-weight: 700; padding: 10px 18px; }
-    button:hover { background: #2b6cb0; }
+    button { background: var(--blue); border: 0; border-radius: 8px; color: #fff; cursor: pointer; font-weight: 700; padding: 10px 18px; }
+    button:hover { background: var(--blue-dark); }
     .btn-delete { background: #e53e3e; padding: 6px 12px; }
     .btn-secondary { background: #718096; }
     .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
-    .stat { background: #fff; border-left: 4px solid var(--blue); border-radius: 6px; padding: 18px; }
-    .stat span { color: var(--muted); font-size: 13px; }
-    .stat strong { display: block; font-size: 23px; margin-top: 8px; }
+    .stat { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 2px 12px rgba(0,0,0,.04); padding: 18px 22px; }
+    .stat span { color: var(--muted); font-size: 13px; font-weight: 700; }
+    .stat strong { display: block; font-size: 26px; margin-top: 4px; }
+    .pos-stats { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 22px; margin-bottom: 24px; }
+    .pos-stat { align-items: center; display: flex; gap: 18px; min-height: 116px; }
+    .stat-icon { width: 60px; height: 60px; flex: 0 0 60px; display: grid; place-items: center; border-radius: 50%; font-size: 28px; }
+    .stat-icon.orange { background: #fff4df; }
+    .stat-icon.blue-tint { background: #e5edff; }
+    .pos-stat-label { color: var(--muted); font-size: 14px; font-weight: 700; }
+    .pos-stat-value { color: var(--ink); display: block; font-size: 29px; font-weight: 800; margin-top: 2px; }
+    .pos-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); gap: 24px; }
+    .panel { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 2px 12px rgba(0,0,0,.04); overflow: hidden; }
+    .panel-header { align-items: center; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; padding: 18px 22px; }
+    .panel-header h2 { font-size: 16px; letter-spacing: .4px; margin: 0; text-transform: uppercase; }
+    .panel-header span { color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; }
+    .pos-search { padding: 16px 18px; }
+    .pos-search input { background: #f8fafc; border-color: #cbd5e1; border-radius: 10px; font-size: 15px; padding: 13px 16px; }
+    .product-list { display: grid; gap: 10px; padding: 0 18px 18px; }
+    .product-row { align-items: center; border: 1px solid var(--line); border-radius: 9px; display: flex; justify-content: space-between; padding: 13px 15px; }
+    .product-row small { color: var(--muted); display: block; margin-top: 2px; }
+    .product-row strong { color: var(--blue); }
+    .cart-body { min-height: 230px; padding: 20px; }
+    .cart-empty { color: var(--muted); padding: 60px 10px; text-align: center; }
     .table-wrap { overflow-x: auto; }
     table { border-collapse: collapse; min-width: 620px; width: 100%; }
     th, td { border-bottom: 1px solid var(--line); padding: 12px; text-align: left; }
@@ -42,46 +66,60 @@
     @media (max-width: 760px) {
       body { display: block; }
       .sidebar { min-height: auto; width: 100%; }
+      .sidebar { width: 100%; }
       .brand { margin-bottom: 10px; }
       .sidebar nav { display: grid; grid-template-columns: repeat(2, 1fr); }
       .main-content { padding: 18px; }
-      .stats { grid-template-columns: 1fr; }
+      .stats, .pos-stats, .pos-layout { grid-template-columns: 1fr; }
       .page-heading { align-items: flex-start; flex-direction: column; }
+    }
+    @media (max-width: 1100px) and (min-width: 761px) {
+      .pos-layout { grid-template-columns: 1fr; }
+      .panel-header span { display: none; }
+      .panel-header h2 { white-space: nowrap; }
     }
   </style>
 </head>
 <body>
   <aside class="sidebar">
-    <div class="brand"><strong>FERRO PINTURAS EL BULE</strong><span>Sistema Administrativo</span></div>
+    <div class="brand"><div class="brand-logo" aria-hidden="true">🛒</div><div><strong>FERRO PINTURAS EL BULE</strong><span>Sistema Administrativo</span></div></div>
+    <nav aria-label="Inicio"><button class="menu-item" data-section="dashboard">🏠 <span>Dashboard</span></button></nav>
     <h2>Operaciones</h2>
     <nav aria-label="Menú principal">
-      <button class="menu-item" data-section="ventas">🛒 Ventas</button>
-      <button class="menu-item" data-section="facturacion">📄 Facturación</button>
-      <button class="menu-item active" data-section="inventario">📦 Inventario</button>
-      <button class="menu-item" data-section="compras">📥 Compras</button>
-      <button class="menu-item" data-section="clientes">👥 Clientes</button>
-      <button class="menu-item" data-section="proveedores">🤝 Proveedores</button>
+      <button class="menu-item active" data-section="ventas">🛒 <span>Ventas</span></button>
+      <button class="menu-item" data-section="facturacion">📄 <span>Facturación</span></button>
+      <button class="menu-item" data-section="inventario">📦 <span>Inventario</span></button>
+      <button class="menu-item" data-section="compras">📥 <span>Compras</span></button>
+      <button class="menu-item" data-section="clientes">👥 <span>Clientes</span></button>
+      <button class="menu-item" data-section="proveedores">🤝 <span>Proveedores</span></button>
     </nav>
     <h2>Finanzas</h2>
     <nav aria-label="Menú financiero">
-      <button class="menu-item" data-section="caja">💰 Caja</button>
-      <button class="menu-item" data-section="gastos">💸 Gastos</button>
+      <button class="menu-item" data-section="caja">💰 <span>Caja</span></button>
+      <button class="menu-item" data-section="gastos">💸 <span>Gastos</span></button>
     </nav>
   </aside>
 
   <main class="main-content">
-    <div class="page-heading"><div><h1 id="page-title">Inventario</h1><p id="page-subtitle">Administra los productos disponibles en tu ferretería.</p></div><span id="current-date"></span></div>
+    <div class="page-heading"><div><h1 id="page-title">Punto de Venta (POS)</h1><p id="page-subtitle">Gestión y control — Ferro Pinturas El Bule</p></div><span id="current-date"></span></div>
 
-    <section id="sec-ventas" class="seccion" hidden>
-      <div class="stats"><div class="stat"><span>Ventas de hoy</span><strong>$0</strong></div><div class="stat"><span>Facturas emitidas</span><strong>0</strong></div><div class="stat"><span>Ganancia estimada</span><strong>$0</strong></div></div>
-      <div class="card"><h2>Punto de Venta</h2><div class="form-group"><div><label>Buscar producto</label><input placeholder="Código o nombre"></div><div><label>Cliente</label><input placeholder="Cliente general"></div><div><label>Método de pago</label><select><option>Efectivo</option><option>Tarjeta</option><option>Transferencia</option><option>Crédito</option></select></div></div><button type="button">Iniciar venta</button></div>
+    <section id="sec-dashboard" class="seccion" hidden>
+      <div class="card"><h2>Dashboard</h2><p class="empty">Resumen general de la operación de Ferro Pinturas El Bule.</p></div>
+    </section>
+
+    <section id="sec-ventas" class="seccion">
+      <div class="pos-stats"><div class="card pos-stat"><div class="stat-icon orange">💰</div><div><span class="pos-stat-label">Total Vendido</span><strong class="pos-stat-value">$0</strong></div></div><div class="card pos-stat"><div class="stat-icon blue-tint">🧾</div><div><span class="pos-stat-label">Nº de Ventas</span><strong class="pos-stat-value">0</strong></div></div></div>
+      <div class="pos-layout">
+        <div class="panel"><div class="panel-header"><h2>📦 Productos Disponibles</h2><span>Clic para agregar al carrito</span></div><div class="pos-search"><input id="pos-search" type="search" placeholder="Buscar por código, nombre o marca rápidamente..." aria-label="Buscar productos"></div><div id="pos-products-list" class="product-list"><div class="cart-empty">No hay productos cargados todavía.</div></div></div>
+        <div class="panel"><div class="panel-header"><h2>🛒 Carrito de Venta</h2><span>Venta nueva</span></div><div class="cart-body"><p class="cart-empty">Selecciona un producto para comenzar la venta.</p></div><button type="button" style="margin: 0 20px 20px; width: calc(100% - 40px);">Confirmar Venta</button></div>
+      </div>
     </section>
 
     <section id="sec-facturacion" class="seccion" hidden>
       <div class="card"><h2>Facturación</h2><p class="empty">Consulta y administra las facturas generadas desde el punto de venta.</p><button type="button">Nueva factura</button></div>
     </section>
 
-    <section id="sec-inventario" class="seccion">
+    <section id="sec-inventario" class="seccion" hidden>
       <div class="card"><h2>Gestión de Inventario</h2><form id="productForm"><div class="form-group"><div><label for="codigo">Código</label><input type="text" id="codigo" required></div><div><label for="nombre">Nombre</label><input type="text" id="nombre" required></div><div><label for="precio">Precio ($ COP)</label><input type="number" step="0.01" id="precio" required></div><div><label for="stock">Stock inicial</label><input type="number" id="stock" required></div></div><button type="submit">Guardar producto</button></form></div>
       <div class="card"><h2>Lista de Productos</h2><div id="product-error" class="notice" hidden></div><div class="table-wrap"><table><thead><tr><th>Código</th><th>Nombre</th><th>Precio</th><th>Stock</th><th>Acciones</th></tr></thead><tbody id="tablaProductos"></tbody></table></div></div>
     </section>
@@ -110,7 +148,8 @@
   <script>
     const API_URL = '/api/productos';
     const sectionTitles = {
-      ventas: ['Ventas', 'Registra ventas y consulta el punto de venta.'],
+      dashboard: ['Dashboard', 'Resumen general de la operación de Ferro Pinturas El Bule.'],
+      ventas: ['Punto de Venta (POS)', 'Gestión y control — Ferro Pinturas El Bule'],
       facturacion: ['Facturación', 'Gestiona las facturas emitidas.'],
       inventario: ['Inventario', 'Administra los productos disponibles en tu ferretería.'],
       compras: ['Compras', 'Registra compras y controla los lotes de proveedores.'],
@@ -130,6 +169,22 @@
 
     document.querySelectorAll('.menu-item').forEach(link => link.addEventListener('click', () => navegar(link.dataset.section)));
 
+    let productosDisponibles = [];
+
+    function renderProductosPOS() {
+      const list = document.getElementById('pos-products-list');
+      const query = document.getElementById('pos-search').value.trim().toLowerCase();
+      const filtered = productosDisponibles.filter(product =>
+        `${product.codigo} ${product.nombre} ${product.marca || ''}`.toLowerCase().includes(query)
+      );
+      list.innerHTML = filtered.length ? filtered.map(product => `
+        <div class="product-row" tabindex="0" title="Agregar ${product.nombre} al carrito">
+          <div><strong>${product.nombre}</strong><small>Código: ${product.codigo} · Stock: ${product.stock}</small></div>
+          <strong>$${Number(product.precio).toLocaleString('es-CO')}</strong>
+        </div>
+      `).join('') : '<div class="cart-empty">No se encontraron productos.</div>';
+    }
+
     async function cargarProductos() {
       const tbody = document.getElementById('tablaProductos');
       const error = document.getElementById('product-error');
@@ -137,15 +192,21 @@
         const response = await fetch(API_URL);
         if (!response.ok) throw new Error('No se pudieron cargar los productos.');
         const productos = await response.json();
+        productosDisponibles = productos;
         error.hidden = true;
         tbody.innerHTML = productos.length ? productos.map(p => `<tr><td>${p.codigo}</td><td>${p.nombre}</td><td>$${Number(p.precio).toLocaleString('es-CO')}</td><td>${p.stock}</td><td><button class="btn-delete" type="button" data-delete-id="${p.id}">Eliminar</button></td></tr>`).join('') : '<tr><td colspan="5" class="empty">No hay productos registrados.</td></tr>';
         tbody.querySelectorAll('[data-delete-id]').forEach(button => button.addEventListener('click', () => eliminarProducto(button.dataset.deleteId)));
+        renderProductosPOS();
       } catch (err) {
+        productosDisponibles = [];
         tbody.innerHTML = '<tr><td colspan="5" class="empty">No hay productos para mostrar.</td></tr>';
         error.textContent = err.message;
         error.hidden = false;
+        renderProductosPOS();
       }
     }
+
+    document.getElementById('pos-search').addEventListener('input', renderProductosPOS);
 
     document.getElementById('productForm').addEventListener('submit', async event => {
       event.preventDefault();
