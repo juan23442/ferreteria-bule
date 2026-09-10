@@ -18,7 +18,7 @@ const pool = new Pool({
 });
 
 // Estado compartido para que todos los dispositivos vean los mismos datos.
-pool.query(`
+const appStateReady = pool.query(`
   CREATE TABLE IF NOT EXISTS app_state (
     id INTEGER PRIMARY KEY,
     state JSONB NOT NULL,
@@ -41,6 +41,7 @@ pool.connect((err, client, release) => {
 
 app.get('/api/state', async (req, res) => {
   try {
+    await appStateReady;
     const result = await pool.query('SELECT state, updated_at FROM app_state WHERE id = 1');
     if (!result.rows[0]) return res.status(404).json({ error: 'Todavía no hay datos compartidos' });
     res.json({ ...result.rows[0].state, _updatedAt: result.rows[0].updated_at });
@@ -52,10 +53,17 @@ app.get('/api/state', async (req, res) => {
 
 app.post('/api/state', async (req, res) => {
   try {
+    await appStateReady;
     const state = req.body;
     if (!state || typeof state !== 'object' || Array.isArray(state)) {
       return res.status(400).json({ error: 'El estado debe ser un objeto' });
     }
+    const current = await pool.query('SELECT state FROM app_state WHERE id = 1');
+    const currentState = current.rows[0]?.state;
+    const incomingHasData = Object.keys(state).some(key => Array.isArray(state[key]) && state[key].length > 0);
+    const currentHasData = currentState && Object.keys(currentState).some(key => Array.isArray(currentState[key]) && currentState[key].length > 0);
+    if (!incomingHasData && currentHasData) return res.status(204).end();
+
     await pool.query(`
       INSERT INTO app_state (id, state, updated_at) VALUES (1, $1::jsonb, NOW())
       ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state, updated_at = NOW()
@@ -178,7 +186,7 @@ app.delete('/api/productos/:id', async (req, res) => {
 });
 
 // Iniciar servidor
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en el puerto ${PORT}`);
 });
