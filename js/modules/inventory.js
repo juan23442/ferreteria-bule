@@ -328,10 +328,7 @@ window.Modules.inventory = {
       return localProduct ? {
         ...remoteProduct,
         ...localProduct,
-        costPrice: Number(remoteProduct.costPrice) > 0 ? Number(remoteProduct.costPrice) : (Number(localProduct.costPrice) || 0),
-        salePrice: Number(remoteProduct.salePrice) || Number(localProduct.salePrice) || 0,
-        stock: Number(remoteProduct.stock) || 0,
-        id: remoteProduct.id
+        id: localProduct.id
       } : remoteProduct;
     });
     const totalItems = result.total || 0;

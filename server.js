@@ -17,6 +17,15 @@ const pool = new Pool({
   }
 });
 
+// Estado compartido para que todos los dispositivos vean los mismos datos.
+pool.query(`
+  CREATE TABLE IF NOT EXISTS app_state (
+    id INTEGER PRIMARY KEY,
+    state JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )
+`).catch(err => console.error('No se pudo preparar el estado compartido:', err.message));
+
 // Conserva el precio de compra que necesita el inventario original.
 pool.query('ALTER TABLE productos ADD COLUMN IF NOT EXISTS costo NUMERIC NOT NULL DEFAULT 0')
   .catch(err => console.error('No se pudo preparar el costo de productos:', err.message));
@@ -28,6 +37,34 @@ pool.connect((err, client, release) => {
   }
   console.log('Conexion exitosa a Supabase PostgreSQL');
   release();
+});
+
+app.get('/api/state', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT state, updated_at FROM app_state WHERE id = 1');
+    if (!result.rows[0]) return res.status(404).json({ error: 'Todavía no hay datos compartidos' });
+    res.json({ ...result.rows[0].state, _updatedAt: result.rows[0].updated_at });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo leer el estado compartido' });
+  }
+});
+
+app.post('/api/state', async (req, res) => {
+  try {
+    const state = req.body;
+    if (!state || typeof state !== 'object' || Array.isArray(state)) {
+      return res.status(400).json({ error: 'El estado debe ser un objeto' });
+    }
+    await pool.query(`
+      INSERT INTO app_state (id, state, updated_at) VALUES (1, $1::jsonb, NOW())
+      ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state, updated_at = NOW()
+    `, [JSON.stringify(state)]);
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo guardar el estado compartido' });
+  }
 });
 
 // Rutas de tu aplicacion

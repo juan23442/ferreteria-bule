@@ -22,6 +22,24 @@ const DB = (() => {
   const KEYS = ['products','categories','sales','purchases','customers','suppliers','cash_movements','expenses','movements'];
   const _cache = {};
   const _indexes = {};
+  let _syncTimer = null;
+  let _syncing = false;
+
+  function _scheduleRemoteSync() {
+    if (_syncing) return;
+    clearTimeout(_syncTimer);
+    _syncTimer = setTimeout(async () => {
+      try {
+        await fetch('/api/state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(DB.exportAll())
+        });
+      } catch (error) {
+        console.warn('No se pudo sincronizar con el servidor:', error.message);
+      }
+    }, 250);
+  }
 
   function _get(key) {
     if (_cache[key] !== undefined) return _cache[key];
@@ -43,6 +61,7 @@ const DB = (() => {
     }
     try {
       localStorage.setItem(key, JSON.stringify(val));
+      _scheduleRemoteSync();
     } catch (e) {
       console.error('localStorage write error', e);
     }
@@ -147,13 +166,47 @@ const DB = (() => {
       if (options.activeOnly) params.set('activeOnly', 'true');
       const response = await fetch(`/api/products?${params}`);
       if (!response.ok) throw new Error(`Consulta de productos falló (${response.status})`);
-      return response.json();
+      const result = await response.json();
+      if (result.items?.length || !this.getAll('products').length) return result;
+
+      const query = String(options.query || '').trim().toLowerCase();
+      const products = this.getAll('products').filter(product => {
+        const matchesQuery = !query || [product.code, product.name, product.brand, product.category]
+          .filter(Boolean).join(' ').toLowerCase().includes(query);
+        const matchesCategory = !options.category || product.category === options.category;
+        const stock = Number(product.stock) || 0;
+        const minStock = Number(product.minStock) || 3;
+        const matchesStock = !options.stock ||
+          (options.stock === 'disponible' && product.active !== false && stock > minStock) ||
+          (options.stock === 'bajo' && product.active !== false && stock > 0 && stock <= minStock) ||
+          (options.stock === 'agotado' && product.active !== false && stock <= 0) ||
+          (options.stock === 'inactivo' && product.active === false);
+        return matchesQuery && matchesCategory && matchesStock && (!options.activeOnly || product.active !== false);
+      });
+      const page = Math.max(1, Number(options.page) || 1);
+      const pageSize = Math.max(1, Number(options.pageSize) || 50);
+      return {
+        items: products.slice((page - 1) * pageSize, page * pageSize),
+        total: products.length,
+        page,
+        pageSize,
+        pages: Math.max(1, Math.ceil(products.length / pageSize))
+      };
     },
 
     async productSummary() {
       const response = await fetch('/api/products/summary');
       if (!response.ok) throw new Error(`Resumen de productos falló (${response.status})`);
-      return response.json();
+      const result = await response.json();
+      const products = this.getAll('products');
+      if (Number(result.total) || !products.length) return result;
+      return {
+        total: products.length,
+        cost: products.reduce((sum, product) => sum + (Number(product.costPrice) || 0) * (Number(product.stock) || 0), 0),
+        sale: products.reduce((sum, product) => sum + (Number(product.salePrice) || 0) * (Number(product.stock) || 0), 0),
+        outStock: products.filter(product => Number(product.stock) <= 0).length,
+        lowStock: products.filter(product => Number(product.stock) > 0 && Number(product.stock) <= (Number(product.minStock) || 3)).length
+      };
     },
 
     save(col, items) {
@@ -395,6 +448,20 @@ const DB = (() => {
 
     // ---- Seed & Migrate Existing Data ----
     async seed() {
+      // El servidor es la fuente compartida; localStorage queda como respaldo offline.
+      try {
+        const remoteResponse = await fetch('/api/state', { cache: 'no-store' });
+        if (remoteResponse.ok) {
+          const remoteState = await remoteResponse.json();
+          _syncing = true;
+          this.importAll(remoteState);
+          _syncing = false;
+          return;
+        }
+      } catch (error) {
+        console.warn('Servidor no disponible; se conserva la copia local:', error.message);
+      }
+
       const currentProducts = this.getAll('products');
       // El catálogo inicial es grande; solo cargarlo cuando el navegador todavía no tiene productos.
       if (currentProducts.length === 0) {
@@ -446,15 +513,15 @@ const DB = (() => {
       });
       if (salesUpdated) this.save('sales', sales);
 
-      // SQLite is the scalable server-side store; localStorage remains the offline-compatible source during migration.
       try {
-        await fetch('/api/migrate', {
+        const response = await fetch('/api/state', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(this.exportAll())
         });
+        if (!response.ok) throw new Error(`Sincronización inicial falló (${response.status})`);
       } catch (error) {
-        console.warn('SQLite no disponible; se mantiene persistencia local:', error.message);
+        console.warn('No se pudo guardar la copia compartida:', error.message);
       }
     }
   };
