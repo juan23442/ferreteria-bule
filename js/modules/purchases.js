@@ -149,6 +149,7 @@ window.Modules.purchases = {
     this._items = [];
     this._renderPurchItems();
     this._renderHistory();
+    this._syncProductsFromApi();
 
     document.getElementById('btn-add-purch-item')?.addEventListener('click', () => {
       this._items.push({
@@ -177,6 +178,45 @@ window.Modules.purchases = {
       Utils.openModal('supplierModal');
     });
     document.getElementById('btn-save-supplier')?.addEventListener('click', () => this._saveSupplier());
+  },
+
+  async _syncProductsFromApi() {
+    try {
+      const response = await fetch('/api/products?page=1&pageSize=100');
+      if (!response.ok) return;
+      const payload = await response.json();
+      const localProducts = DB.getAll('products');
+      const byCode = new Map(localProducts.map(product => [String(product.code || '').trim().toLowerCase(), product]));
+      const syncedProducts = [...localProducts];
+
+      (payload.items || []).forEach(remoteProduct => {
+        const code = String(remoteProduct.code || '').trim();
+        if (!code) return;
+        const existing = byCode.get(code.toLowerCase());
+        const product = {
+          ...(existing || {}),
+          id: existing?.id || String(remoteProduct.id),
+          code,
+          name: remoteProduct.name || existing?.name || code,
+          costPrice: Number(remoteProduct.costPrice ?? existing?.costPrice) || 0,
+          salePrice: Number(remoteProduct.salePrice ?? existing?.salePrice) || 0,
+          stock: Number(remoteProduct.stock) || 0,
+          minStock: Number(remoteProduct.minStock ?? existing?.minStock) || 3,
+          active: remoteProduct.active !== false
+        };
+        if (existing) {
+          const index = syncedProducts.findIndex(item => item.id === existing.id);
+          if (index !== -1) syncedProducts[index] = product;
+        } else {
+          syncedProducts.push(product);
+        }
+      });
+
+      DB.save('products', syncedProducts);
+      this._renderPurchItems();
+    } catch (error) {
+      console.warn('No se pudieron sincronizar productos para Compras:', error.message);
+    }
   },
 
   _resolveNewProductName(originalName, type, customName) {
