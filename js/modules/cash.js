@@ -46,6 +46,7 @@ window.Modules.cash = {
             <th>Tipo</th>
             <th>Concepto / Referencia</th>
             <th>Monto ($ COP)</th>
+            <th>Acciones</th>
           </tr>
         </thead>
         <tbody id="cash-tbody"></tbody>
@@ -124,7 +125,7 @@ window.Modules.cash = {
     if (!tbody) return;
 
     if (movs.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="4">${Utils.emptyState('Sin movimientos de caja en este período', '💰')}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5">${Utils.emptyState('Sin movimientos de caja en este período', '💰')}</td></tr>`;
       return;
     }
 
@@ -134,8 +135,22 @@ window.Modules.cash = {
         <td>${m.type === 'ingreso' ? '<span class="badge badge-success">📥 Ingreso</span>' : '<span class="badge badge-danger">📤 Egreso</span>'}</td>
         <td><strong>${Utils.escHtml(m.concept)}</strong></td>
         <td class="${m.type==='ingreso'?'text-success':'text-danger'} font-bold">${m.type==='ingreso'?'+':'-'}${Utils.formatCurrency(m.amount)}</td>
+        <td><button class="btn btn-sm btn-danger" title="Eliminar movimiento" aria-label="Eliminar movimiento ${Utils.escHtml(m.concept)}" onclick="Modules.cash._del('${m.id}')">🗑️</button></td>
       </tr>
     `).join('');
+  },
+
+  _del(id) {
+    const movement = DB.findById('cash_movements', id) || DB.getAll('cash_movements').find(item => item.id === id);
+    if (!movement) return;
+    if (!Utils.confirm(`¿Eliminar el movimiento "${movement.concept}" de Caja?`)) return;
+
+    DB.delete('cash_movements', id);
+    if (movement.expenseId) DB.delete('expenses', movement.expenseId);
+    Utils.showToast('Movimiento eliminado de Caja', 'success');
+
+    const content = document.getElementById('content');
+    if (content) { content.innerHTML = this.render(); this.init(); }
   },
 
   _saveMov() {
