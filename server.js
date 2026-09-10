@@ -33,6 +33,46 @@ app.get('/api/productos', async (req, res) => {
   }
 });
 
+// Crear un nuevo producto
+app.post('/api/productos', async (req, res) => {
+  const { codigo, nombre, precio, stock } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO productos (codigo, nombre, precio, stock) VALUES ($1, $2, $3, $4) RETURNING *',
+      [codigo, nombre, precio, stock]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Actualizar un producto existente
+app.put('/api/productos/:id', async (req, res) => {
+  const { id } = req.params;
+  const { codigo, nombre, precio, stock } = req.body;
+  try {
+    const result = await pool.query(
+      'UPDATE productos SET codigo = $1, nombre = $2, precio = $3, stock = $4 WHERE id = $5 RETURNING *',
+      [codigo, nombre, precio, stock, id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Eliminar un producto
+app.delete('/api/productos/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM productos WHERE id = $1', [id]);
+    res.json({ message: 'Producto eliminado correctamente' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Iniciar servidor
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
