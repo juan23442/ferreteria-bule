@@ -1,0 +1,32 @@
+{
+  "name": "ferreteria-el-bule",
+  "version": "2.5.0",
+  "description": "Sistema Administrativo para FERRO PINTURAS EL BULE — Inventario, POS, Facturación, Caja y Reportes",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "ferretería",
+    "inventario",
+    "pos",
+    "facturación",
+    "caja"
+  ],
+  "author": "FERRO PINTURAS EL BULE",
+  "license": "UNLICENSED",
+  "private": true,
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.5.0"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "mssql": "^12.7.1",
+    "sqlite3": "^6.0.1"
+  }
+}

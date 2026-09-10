@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Sistema Administrativo para FERRO PINTURAS EL BULE - Inventario, POS Ventas, Rebajas, Facturación, Compras, Caja y Reportes">
+  <title>FERRO PINTURAS EL BULE — Dashboard y Administración</title>
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/print.css">
+
+  <!-- Favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔧</text></svg>">
+</head>
+<body>
+
+  <div id="app">
+    <!-- Sidebar (Azul Rey Profundo) -->
+    <aside id="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-logo" id="brand-logo-content">🛒</div>
+        <div class="brand-info">
+          <div class="brand-name" id="brand-name">FERRO PINTURAS EL BULE</div>
+          <div class="brand-sub">Sistema Administrativo</div>
+        </div>
+      </div>
+      <nav class="sidebar-nav" id="sidebar-nav">
+        <!-- Generado por app.js -->
+      </nav>
+      <div class="sidebar-footer">
+        <span>&copy; 2026 FERRO PINTURAS EL BULE</span>
+        <span class="badge badge-success" style="font-size:9.5px">v2.5</span>
+      </div>
+    </aside>
+
+    <!-- Main Panel -->
+    <main id="main">
+      <!-- Top Header (Igual a la imagen) -->
+      <header id="header">
+        <div class="header-left">
+          <button id="sidebar-toggle" aria-label="Menú">☰</button>
+          <div class="page-title-box">
+            <h1 id="page-title">Dashboard</h1>
+            <span class="page-subtitle" id="page-subtitle">Bienvenido de nuevo, Administrador</span>
+          </div>
+        </div>
+        <div class="header-right">
+          <!-- Toggle Claro / Oscuro -->
+          <button class="header-icon-btn" id="theme-toggle-btn" title="Cambiar Tema Claro / Oscuro">🌙</button>
+
+          <!-- Notificaciones -->
+          <button class="header-icon-btn" id="notifications-btn" title="Notificaciones del sistema" aria-label="Notificaciones del sistema" aria-controls="notificationsModal" aria-expanded="false">
+            🔔<span class="badge-dot" id="notifications-count" hidden>0</span>
+          </button>
+
+          <!-- Nombre del Local -->
+          <div class="header-badge-pill">
+            <span>🏪</span> <span>Ferro Pinturas El Bule</span>
+          </div>
+
+          <!-- Fecha Actual -->
+          <div class="header-badge-pill">
+            <span id="header-date-str">martes, 18 de agosto de 2026</span>
+            <span>📅</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Content Area -->
+      <div id="content">
+        <div class="loading-spinner"><div class="spinner"></div></div>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal" id="notificationsModal" style="display:none">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>🔔 Notificaciones del sistema</h3>
+        <button class="modal-close" id="notifications-close" aria-label="Cerrar notificaciones">✕</button>
+      </div>
+      <div class="modal-body" id="notifications-body"></div>
+    </div>
+  </div>
+
+  <!-- Overlay para Mobile Sidebar -->
+  <div id="overlay"></div>
+
+  <!-- Contenedor Notificaciones Toast -->
+  <div id="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="js/db.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/print.js"></script>
+  <script src="js/modules/dashboard.js"></script>
+  <script src="js/modules/inventory.js"></script>
+  <script src="js/modules/sales.js"></script>
+  <script src="js/modules/invoices.js"></script>
+  <script src="js/modules/purchases.js"></script>
+  <script src="js/modules/movements.js"></script>
+  <script src="js/modules/customers.js"></script>
+  <script src="js/modules/cash.js"></script>
+  <script src="js/modules/expenses.js"></script>
+  <script src="js/modules/reports.js"></script>
+  <script src="js/modules/settings.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
