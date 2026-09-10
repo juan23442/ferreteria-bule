@@ -311,12 +311,13 @@ window.Modules.inventory = {
     const stock = document.getElementById('inv-stock-filter')?.value || '';
     tbody.innerHTML = `<tr><td colspan="10"><div class="loading-spinner"><div class="spinner"></div></div></td></tr>`;
 
-    DB.listProducts({ query: search, category, stock, page: this._currentPage, pageSize: this._pageSize })
-      .then(result => this._renderProductPage(result))
-      .catch(() => {
-        const filtered = this._getFilteredProducts();
-        this._renderProductPage({ items: filtered.slice((this._currentPage - 1) * this._pageSize, this._currentPage * this._pageSize), total: filtered.length, pages: Math.ceil(filtered.length / this._pageSize) || 1, page: this._currentPage });
-      });
+    const filtered = this._getFilteredProducts();
+    this._renderProductPage({
+      items: filtered.slice((this._currentPage - 1) * this._pageSize, this._currentPage * this._pageSize),
+      total: filtered.length,
+      pages: Math.ceil(filtered.length / this._pageSize) || 1,
+      page: this._currentPage
+    });
   },
 
   _renderProductPage(result) {
