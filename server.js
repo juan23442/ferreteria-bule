@@ -39,11 +39,17 @@ app.get('/api/productos', async (req, res) => {
 
 // Crear un nuevo producto
 app.post('/api/productos', async (req, res) => {
-  const { codigo, nombre, precio, stock } = req.body;
+  const codigo = req.body.codigo ?? req.body.code;
+  const nombre = req.body.nombre ?? req.body.name;
+  const precio = req.body.precio ?? req.body.salePrice;
+  const stock = req.body.stock;
   try {
+    if (!codigo || !nombre || !Number.isFinite(Number(precio)) || !Number.isFinite(Number(stock))) {
+      return res.status(400).json({ error: 'Código, nombre, precio y stock son obligatorios' });
+    }
     const result = await pool.query(
       'INSERT INTO productos (codigo, nombre, precio, stock) VALUES ($1, $2, $3, $4) RETURNING *',
-      [codigo, nombre, precio, stock]
+      [codigo, nombre, Number(precio), Number(stock)]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
