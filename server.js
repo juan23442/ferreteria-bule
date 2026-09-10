@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -50,6 +52,22 @@ app.get('/api/state', async (req, res) => {
     const state = result.rows[0].state;
     const hasData = Object.keys(state).some(key => key !== 'categories' && Array.isArray(state[key]) && state[key].length > 0);
     if (!hasData) return res.status(404).json({ error: 'Todavía no hay datos compartidos' });
+
+    const seedPath = path.join(__dirname, 'data', 'products.json');
+    const seedProducts = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
+    const productsById = new Map((state.products || []).map(product => [String(product.id), product]));
+    const productsByCode = new Map((state.products || []).map(product => [String(product.code || '').toLowerCase(), product]));
+    for (const product of seedProducts) {
+      const code = String(product.code || '').toLowerCase();
+      if (!productsById.has(String(product.id)) && !productsByCode.has(code)) {
+        productsById.set(String(product.id), product);
+      }
+    }
+    const mergedProducts = [...productsById.values()];
+    if (mergedProducts.length > (state.products || []).length) {
+      state.products = mergedProducts;
+      await pool.query('UPDATE app_state SET state = $1::jsonb, updated_at = NOW() WHERE id = 1', [JSON.stringify(state)]);
+    }
     res.json({ ...state, _updatedAt: result.rows[0].updated_at });
   } catch (err) {
     console.error(err);
