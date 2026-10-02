@@ -466,6 +466,41 @@ const DB = (() => {
       this.update('products', p.id, { batches: p.batches, stock: p.stock });
     },
 
+    // Revierte el stock que añadió una compra (elimina cantidad del lote más reciente con ese costo)
+    restoreStockReverse(productId, qty, unitCost) {
+      const p = this.findById('products', productId);
+      if (!p) return;
+      let toRemove = Math.max(0, parseInt(qty) || 0);
+
+      if (p.batches && p.batches.length > 0) {
+        // Buscar el lote con el mismo costo (LIFO para revertir compra)
+        const matchBatch = unitCost > 0
+          ? [...p.batches].reverse().find(b => Math.abs((b.costPrice || 0) - unitCost) < 0.01)
+          : null;
+
+        if (matchBatch) {
+          const take = Math.min(matchBatch.stock || 0, toRemove);
+          matchBatch.stock = Math.max(0, (matchBatch.stock || 0) - take);
+          toRemove -= take;
+        }
+
+        // Si quedó algo por descontar, descontar del último lote disponible
+        if (toRemove > 0) {
+          for (let i = p.batches.length - 1; i >= 0 && toRemove > 0; i--) {
+            const take = Math.min(p.batches[i].stock || 0, toRemove);
+            p.batches[i].stock = Math.max(0, (p.batches[i].stock || 0) - take);
+            toRemove -= take;
+          }
+        }
+
+        p.stock = Math.max(0, p.batches.reduce((sum, b) => sum + (b.stock || 0), 0));
+      } else {
+        p.stock = Math.max(0, (p.stock || 0) - qty);
+      }
+
+      this.update('products', p.id, { batches: p.batches, stock: p.stock });
+    },
+
     // ---- Backup / Restore ----
     exportAll() {
       const d = { _version: 2, _date: new Date().toISOString() };

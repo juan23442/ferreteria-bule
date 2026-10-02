@@ -14,13 +14,17 @@ window.Modules.purchases = {
     const suppliers = DB.getAll('suppliers');
     const today = Utils.today();
     const month = today.slice(0, 7);
+    // Filtro estricto: solo compras del día actual (usando Utils.isToday para respetar medianoche)
+    const todayPurchases = purchases.filter(p => Utils.isToday(p.date || p.createdAt));
     const monthPurchases = purchases.filter(p => p.date && p.date.startsWith(month));
+    const todayTotal = todayPurchases.reduce((a, p) => a + p.total, 0);
     const monthTotal = monthPurchases.reduce((a, p) => a + p.total, 0);
 
     const suppOptions = suppliers.map(s => `<option value="${Utils.escHtml(s.name)}">${Utils.escHtml(s.name)}</option>`).join('');
 
     return `
-    <div class="grid-3 mb-24">
+    <div class="grid-4 mb-24">
+      <div class="stat-card"><div class="stat-icon green">📅</div><div class="stat-info"><div class="stat-label">Compras de Hoy</div><div class="stat-value">${todayPurchases.length}</div><div class="stat-subtext">${Utils.formatCurrency(todayTotal)}</div></div></div>
       <div class="stat-card"><div class="stat-icon blue">📦</div><div class="stat-info"><div class="stat-label">Compras del Mes</div><div class="stat-value">${monthPurchases.length}</div></div></div>
       <div class="stat-card"><div class="stat-icon yellow">💵</div><div class="stat-info"><div class="stat-label">Monto Compras Mes</div><div class="stat-value accent">${Utils.formatCurrency(monthTotal)}</div></div></div>
       <div class="stat-card"><div class="stat-icon green">🤝</div><div class="stat-info"><div class="stat-label">Proveedores Activos</div><div class="stat-value success">${suppliers.length}</div></div></div>
@@ -85,7 +89,7 @@ window.Modules.purchases = {
         <div class="card-body" style="padding:0">
           <div class="table-wrapper">
             <table class="table">
-              <thead><tr><th>Fecha</th><th>Proveedor</th><th>Items</th><th>Total Compra</th><th>Detalle</th></tr></thead>
+              <thead><tr><th>Fecha</th><th>Proveedor</th><th>Items</th><th>Total Compra</th><th>Acciones</th></tr></thead>
               <tbody id="purch-history-tbody"></tbody>
             </table>
           </div>
@@ -582,7 +586,7 @@ window.Modules.purchases = {
     const purchases = DB.getAll('purchases').slice().reverse();
 
     if (purchases.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="5">${Utils.emptyState('Sin compras registradas', '📦')}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6">${Utils.emptyState('Sin compras registradas', '📦')}</td></tr>`;
       return;
     }
 
@@ -592,9 +596,47 @@ window.Modules.purchases = {
         <td><strong>${Utils.escHtml(p.supplierName)}</strong></td>
         <td>Productos: ${(p.items||[]).length}<br><small>Unidades ingresadas: ${(p.items||[]).reduce((sum, it) => sum + (it.qty || 0), 0)}</small></td>
         <td class="text-accent font-bold">${Utils.formatCurrency(p.total)}</td>
-        <td><button class="btn btn-sm btn-secondary" onclick="Modules.purchases._viewDetail('${p.id}')">👁️ Ver</button></td>
+        <td>
+          <button class="btn btn-sm btn-secondary" onclick="Modules.purchases._viewDetail('${p.id}')">👁️ Ver</button>
+          <button class="btn btn-sm btn-danger" onclick="Modules.purchases._deletePurchase('${p.id}')" title="Eliminar esta compra y revertir stock">🗑️</button>
+        </td>
       </tr>
     `).join('');
+  },
+
+  _deletePurchase(purchaseId) {
+    const purchase = DB.findById('purchases', purchaseId);
+    if (!purchase) return;
+
+    if (!Utils.confirm(`¿Eliminar la compra a "${purchase.supplierName}" del ${Utils.formatDate(purchase.date)} por ${Utils.formatCurrency(purchase.total)}?\n\nEsto revertirá el stock ingresado y eliminará el movimiento de caja asociado.`)) return;
+
+    // Revertir el stock de cada producto de la compra
+    (purchase.items || []).forEach(it => {
+      const p = DB.findById('products', it.productId);
+      if (p && it.qty > 0) {
+        DB.restoreStockReverse(it.productId, it.qty, it.unitCost);
+        DB.logMovement({
+          productId: it.productId,
+          productName: it.name,
+          qty: -it.qty,
+          type: 'Eliminación Compra',
+          reason: `Compra eliminada — ${purchase.supplierName} (Stock revertido)`,
+          value: it.subtotal || 0
+        });
+      }
+    });
+
+    // Eliminar el movimiento de caja asociado (egreso de compra)
+    const cashMovs = DB.getAll('cash_movements');
+    const linked = cashMovs.find(m => m.reference === purchaseId);
+    if (linked) DB.delete('cash_movements', linked.id);
+
+    // Eliminar la compra
+    DB.delete('purchases', purchaseId);
+
+    Utils.showToast(`Compra eliminada. Stock revertido correctamente.`, 'warning');
+    const content = document.getElementById('content');
+    if (content) { content.innerHTML = this.render(); this.init(); }
   },
 
   _viewDetail(id) {

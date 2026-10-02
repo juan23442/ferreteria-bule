@@ -146,8 +146,35 @@ window.Modules.cash = {
     if (!Utils.confirm(`¿Eliminar el movimiento "${movement.concept}" de Caja?`)) return;
 
     DB.delete('cash_movements', id);
-    if (movement.expenseId) DB.delete('expenses', movement.expenseId);
-    Utils.showToast('Movimiento eliminado de Caja', 'success');
+
+    // Si el movimiento tiene referencia a una compra (egreso de compra), también eliminar la compra y revertir el stock
+    if (movement.reference && (movement.concept || '').toLowerCase().includes('compra')) {
+      const purchase = DB.findById('purchases', movement.reference);
+      if (purchase) {
+        // Revertir el stock que agregó esta compra
+        (purchase.items || []).forEach(it => {
+          const p = DB.findById('products', it.productId);
+          if (p && it.qty > 0) {
+            DB.restoreStockReverse(it.productId, it.qty, it.unitCost);
+            DB.logMovement({
+              productId: it.productId,
+              productName: it.name,
+              qty: -it.qty,
+              type: 'Eliminación Compra',
+              reason: `Compra eliminada — ${purchase.supplierName} (Stock revertido)`,
+              value: it.subtotal || 0
+            });
+          }
+        });
+        DB.delete('purchases', movement.reference);
+        Utils.showToast('Compra y movimiento de caja eliminados. Stock revertido.', 'warning');
+      } else {
+        Utils.showToast('Movimiento eliminado de Caja', 'success');
+      }
+    } else {
+      if (movement.expenseId) DB.delete('expenses', movement.expenseId);
+      Utils.showToast('Movimiento eliminado de Caja', 'success');
+    }
 
     const content = document.getElementById('content');
     if (content) { content.innerHTML = this.render(); this.init(); }
