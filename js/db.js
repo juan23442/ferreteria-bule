@@ -251,6 +251,25 @@ const DB = (() => {
     },
 
     delete(col, id) {
+      if (col === 'sales') {
+        const sale = this.findById('sales', id);
+        if (sale && sale.status !== 'anulada' && sale.stockDeducted !== false) {
+          (sale.items || []).forEach(it => {
+            const p = this.findById('products', it.productId);
+            if (p) {
+              this.restoreStock(it.productId, it.qty);
+              this.logMovement({
+                productId: it.productId,
+                productName: it.name,
+                qty: it.qty,
+                type: 'Eliminación Factura / Cotización',
+                reason: `Eliminación de ${sale.status === 'pendiente' ? 'Cotización / Crédito' : 'Venta'} ${sale.invoiceNumber} (Stock restaurado)`,
+                value: sale.totalPaid || 0
+              });
+            }
+          });
+        }
+      }
       this.save(col, this.getAll(col).filter(x => x.id !== id));
     },
 

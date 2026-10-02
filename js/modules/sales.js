@@ -500,6 +500,7 @@ window.Modules.sales = {
       // CREATE NEW SALE
       const invoiceNumber = Utils.buildInvoiceNum();
       const saleId = Utils.generateId('sale');
+      const isCredit = paymentMethod === 'crédito' || paymentMethod === 'credito';
 
       const sale = {
         id: saleId,
@@ -524,10 +525,10 @@ window.Modules.sales = {
         taxRate: 0,
         taxAmount: 0,
         total,
-        realProfit,
+        realProfit: isCredit ? 0 : realProfit,
         paymentMethod,
-        status: 'pagada',
-        payments: [{
+        status: isCredit ? 'pendiente' : 'pagada',
+        payments: isCredit ? [] : [{
           id: Utils.generateId('pay'),
           datetime: Utils.nowISO(),
           date: Utils.today(),
@@ -537,36 +538,53 @@ window.Modules.sales = {
           balanceBefore: total,
           balanceAfter: 0
         }],
-        totalPaid: total,
-        totalPending: 0,
-        paidAt: Utils.nowISO(),
+        totalPaid: isCredit ? 0 : total,
+        totalPending: isCredit ? total : 0,
+        paidAt: isCredit ? null : Utils.nowISO(),
         stockDeducted: true,
+        deliveryStatus: isCredit ? 'entregada' : 'retirada',
         notes
       };
 
       DB.add('sales', sale);
 
-      // Deduct Stock & Log Movement
+      // Deduct Stock & Log Movement (Descuento inmediato tanto para venta al contado como fiada/crédito)
       for (const item of this._cart) {
         const p = DB.findById('products', item.productId);
         if (p) {
           DB.deductStock(item.productId, item.qty);
-          DB.logMovement({ productId: p.id, productName: p.name, qty: -item.qty, type: 'Venta', reason: `Venta ${invoiceNumber}`, value: total });
+          DB.logMovement({
+            productId: p.id,
+            productName: p.name,
+            qty: -item.qty,
+            type: isCredit ? 'Venta a Crédito / Fiado' : 'Venta',
+            reason: isCredit
+              ? `Venta a crédito ${invoiceNumber} para ${customerName} (Mercancía entregada)`
+              : `Venta ${invoiceNumber}`,
+            value: total
+          });
         }
       }
 
-      // Cash Movement (Registers actual real paid total)
-      DB.add('cash_movements', {
-        id: Utils.generateId('cash'),
-        date: Utils.today(),
-        datetime: Utils.nowISO(),
-        type: 'ingreso',
-        concept: `Venta ${invoiceNumber} (${customerName})`,
-        amount: total,
-        reference: saleId
-      });
+      // Cash Movement (Solo registra ingreso de dinero real en caja si no es a crédito)
+      if (!isCredit) {
+        DB.add('cash_movements', {
+          id: Utils.generateId('cash'),
+          date: Utils.today(),
+          datetime: Utils.nowISO(),
+          type: 'ingreso',
+          concept: `Venta ${invoiceNumber} (${customerName})`,
+          amount: total,
+          method: paymentMethod,
+          reference: saleId
+        });
+      }
 
-      Utils.showToast(`Venta ${invoiceNumber} registrada por ${Utils.formatCurrency(total)}`, 'success');
+      if (isCredit) {
+        Utils.showToast(`Venta a crédito ${invoiceNumber} registrada por ${Utils.formatCurrency(total)}. Mercancía entregada y stock descontado del inventario. Saldo pendiente: ${Utils.formatCurrency(total)}.`, 'warning');
+      } else {
+        Utils.showToast(`Venta ${invoiceNumber} registrada por ${Utils.formatCurrency(total)}`, 'success');
+      }
 
       if (Utils.confirm('¿Desea imprimir la factura ahora?')) {
         if (window.PrintModule) window.PrintModule.printInvoice(saleId);

@@ -348,6 +348,7 @@ window.Modules.invoices = {
     const prevPaid    = s.totalPaid || 0;
     const newTotalPaid = prevPaid + amount;
     const newPending   = Math.max(0, previousBalance - amount);
+    const isFullyPaid  = newPending < 0.01;
     const payments = s.payments || [];
     payments.push({
       id: Utils.generateId('pay'),
