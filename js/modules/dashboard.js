@@ -13,20 +13,13 @@ window.Modules.dashboard = {
     const cashBalance = DB.getCashBalance();
 
     const today = Utils.today();
-    const d = new Date(today);
-
-    // Week range
-    const dayOfWeek = d.getDay();
-    const monday = new Date(d); monday.setDate(d.getDate() - ((dayOfWeek + 6) % 7));
-    const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
-    const monStr = monday.toISOString().split('T')[0];
-    const sunStr = sunday.toISOString().split('T')[0];
+    const [monStr, sunStr] = Utils.getCurrentWeekRange();
 
     // Month & Year
     const monthStr = today.slice(0, 7);
     const yearStr = today.slice(0, 4);
 
-    // Sales Metrics
+    // Sales Metrics (Filtrado exacto por fecha local)
     const todaySales = sales.filter(s => s.date === today);
     const weekSales  = sales.filter(s => s.date >= monStr && s.date <= sunStr);
     const monthSales = sales.filter(s => s.date && s.date.startsWith(monthStr));

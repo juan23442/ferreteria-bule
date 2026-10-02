@@ -54,15 +54,9 @@ window.Modules.reports = {
 
   _getDateRange() {
     const today = Utils.today();
-    const d = new Date(today);
     switch (this._period) {
       case 'today': return [today, today];
-      case 'week': {
-        const dayOfWeek = d.getDay();
-        const monday = new Date(d); monday.setDate(d.getDate() - ((dayOfWeek + 6) % 7));
-        const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
-        return [monday.toISOString().split('T')[0], sunday.toISOString().split('T')[0]];
-      }
+      case 'week': return Utils.getCurrentWeekRange();
       case 'month': return [today.slice(0, 7) + '-01', today];
       case 'year': return [today.slice(0, 4) + '-01-01', today.slice(0, 4) + '-12-31'];
       case 'custom': return [this._from || today.slice(0, 4) + '-01-01', this._to || today];

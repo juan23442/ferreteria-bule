@@ -148,7 +148,15 @@
       page = 'dashboard';
     }
 
-    if (page === currentPage) return;
+    if (page === currentPage && !force) {
+      // Re-render current page to refresh data
+      const content = document.getElementById('content');
+      if (content && window.Modules[page]) {
+        content.innerHTML = window.Modules[page].render();
+        if (window.Modules[page].init) window.Modules[page].init();
+      }
+      return;
+    }
     currentPage = page;
 
     // Update active nav
@@ -178,6 +186,14 @@
     // Close sidebar on mobile
     document.getElementById('sidebar').classList.remove('open');
     document.getElementById('overlay').classList.remove('active');
+  }
+
+  function updateHeaderDate() {
+    const dateEl = document.getElementById('header-date-str');
+    if (dateEl) {
+      const now = new Date();
+      dateEl.textContent = now.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    }
   }
 
   async function init() {
@@ -210,16 +226,38 @@
     renderNotifications();
 
     // Display current date
-    const dateEl = document.getElementById('header-date-str');
-    if (dateEl) {
-      const now = new Date();
-      dateEl.textContent = now.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    }
+    updateHeaderDate();
+
+    // Detección automática de cambio de día (para que al pasar la medianoche se actualice a un nuevo día)
+    let lastKnownDate = Utils.today();
+    setInterval(() => {
+      const currentDate = Utils.today();
+      if (currentDate !== lastKnownDate) {
+        lastKnownDate = currentDate;
+        updateHeaderDate();
+        if (currentPage && window.Modules[currentPage]) {
+          navigate(currentPage, true);
+        }
+      }
+    }, 15000); // Chequeo cada 15 segundos
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        const currentDate = Utils.today();
+        if (currentDate !== lastKnownDate) {
+          lastKnownDate = currentDate;
+          updateHeaderDate();
+          if (currentPage && window.Modules[currentPage]) {
+            navigate(currentPage, true);
+          }
+        }
+      }
+    });
 
     // One delegated listener avoids rebinding navigation handlers on every visit.
     document.getElementById('sidebar-nav')?.addEventListener('click', (event) => {
       const btn = event.target.closest('.nav-item');
-      if (btn) navigate(btn.dataset.page);
+      if (btn) navigate(btn.dataset.page, true);
     });
 
     // Sidebar toggle (mobile)

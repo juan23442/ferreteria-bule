@@ -498,70 +498,39 @@ window.Modules.purchases = {
 
     const total = validItems.reduce((a, it) => a + it.subtotal, 0);
 
-    let createdNewProducts = 0;
+    let totalUnitsBought = 0;
 
-    // Procesar cada producto según la regla
+    // Procesar cada producto sumando su stock y registrando su lote
     validItems.forEach(it => {
       const p = DB.findById('products', it.productId);
       if (!p) return;
 
       const change = it.unitCost - (it.currentCost || p.costPrice || 0);
       const changeType = change > 0 ? 'AUMENTO' : (change < 0 ? 'BAJO' : 'REGULAR');
-      if (changeType === 'REGULAR') {
-        DB.addPurchaseBatch(p.id, {
-          qty: it.qty,
-          unitCost: it.unitCost,
-          salePrice: p.salePrice,
-          date,
-          supplier: supplierName,
-          changeType: 'REGULAR',
-          label: `${p.name} — ${p.code || 'S/C'} — REGULAR`
-        });
-        it.finalProductId = p.id;
-        it.finalName = p.name;
-      } else {
-        const variantName = this._resolvePriceVariantName(p.name, changeType);
-        const variantId = Utils.generateId('prod');
-        const variantSalePrice = it.newSalePrice || Math.round(it.unitCost * 1.3);
-        DB.add('products', {
-          id: variantId,
-          code: p.code || '',
-          name: variantName,
-          brand: p.brand || '',
-          category: p.category || '',
-          unit: p.unit || 'unidad',
-          costPrice: it.unitCost,
-          salePrice: variantSalePrice,
-          stock: it.qty,
-          minStock: p.minStock || 3,
-          supplier: supplierName,
-          description: p.description || '',
-          active: true,
-          parentProductId: p.id,
-          createdAt: date,
-          batches: [{
-            id: `batch_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-            batchNumber: 1,
-            label: `${variantName} — ${p.code || 'S/C'} — ${changeType}`,
-            changeType,
-            costPrice: it.unitCost,
-            salePrice: variantSalePrice,
-            initialQty: it.qty,
-            stock: it.qty,
-            date,
-            supplier: supplierName
-          }]
-        }, true);
-        it.finalProductId = variantId;
-        it.finalName = variantName;
-        createdNewProducts++;
-      }
+      const label = `${p.name} — ${p.code || 'S/C'} — ${changeType}`;
+
+      // AUMENTAR SIEMPRE EL STOCK DEL PRODUCTO PRINCIPAL Y REGISTRAR SU LOTE
+      DB.addPurchaseBatch(p.id, {
+        qty: it.qty,
+        unitCost: it.unitCost,
+        salePrice: it.newSalePrice || p.salePrice,
+        date,
+        supplier: supplierName,
+        changeType,
+        label
+      });
+
+      it.finalProductId = p.id;
+      it.finalName = p.name;
+      it.changeType = changeType;
+      totalUnitsBought += it.qty;
+
       DB.logMovement({
-        productId: it.finalProductId,
-        productName: it.finalName,
+        productId: p.id,
+        productName: p.name,
         qty: it.qty,
         type: changeType === 'REGULAR' ? 'Compra' : `Compra — ${changeType}`,
-        reason: `Compra a ${supplierName}`,
+        reason: `Compra a ${supplierName} (${changeType !== 'REGULAR' ? changeType + ' de costo' : 'Mismo costo'})`,
         value: it.subtotal
       });
     });
@@ -578,8 +547,8 @@ window.Modules.purchases = {
         unitCost: it.unitCost,
         subtotal: it.subtotal,
         code: it.code,
-        isPriceIncrease: it.unitCost > it.currentCost,
-        changeType: it.unitCost > it.currentCost ? 'AUMENTO' : (it.unitCost < it.currentCost ? 'BAJO' : 'REGULAR')
+        isPriceIncrease: it.unitCost > (it.currentCost || 0),
+        changeType: it.changeType || 'REGULAR'
       })),
       total,
       notes,
@@ -601,9 +570,7 @@ window.Modules.purchases = {
 
     this._items = [];
 
-    Utils.showToast(createdNewProducts > 0
-      ? `Compra registrada. Se creó ${createdNewProducts} producto(s) con el mismo código.`
-      : 'Compra registrada correctamente. Se aumentó la cantidad del producto.', 'success');
+    Utils.showToast(`✅ Compra registrada correctamente. Se aumentó el stock en inventario (+${totalUnitsBought} unidades).`, 'success');
 
     const content = document.getElementById('content');
     if (content) { content.innerHTML = this.render(); this.init(); }

@@ -189,19 +189,13 @@ window.Modules.sales = {
   _getFilteredSales() {
     const sales = DB.getAll('sales');
     const today = Utils.today();
-    const d = new Date(today);
+    const [monStr, sunStr] = Utils.getCurrentWeekRange();
 
     switch (this._periodFilter) {
       case 'today':
         return sales.filter(s => s.date === today);
-      case 'week': {
-        const dayOfWeek = d.getDay();
-        const monday = new Date(d); monday.setDate(d.getDate() - ((dayOfWeek + 6) % 7));
-        const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
-        const monStr = monday.toISOString().split('T')[0];
-        const sunStr = sunday.toISOString().split('T')[0];
+      case 'week':
         return sales.filter(s => s.date >= monStr && s.date <= sunStr);
-      }
       case 'month':
         return sales.filter(s => s.date && s.date.startsWith(today.slice(0, 7)));
       case 'year':
@@ -682,6 +676,16 @@ window.Modules.sales = {
   _savePending() {
     if (this._cart.length === 0) { Utils.showToast('El carrito está vacío', 'error'); return; }
 
+    // Validación de stock antes de cotizar / reservar
+    for (const item of this._cart) {
+      const p = DB.findById('products', item.productId);
+      const availableStock = p ? p.stock : item.maxStock;
+      if (!p || item.qty > availableStock) {
+        Utils.showToast(`❌ Cotización denegada: Intentas cotizar ${item.qty} unidades de "${item.name}", pero solo hay ${availableStock} disponibles.`, 'error');
+        return;
+      }
+    }
+
     const subtotal = this._cart.reduce((a,c) => a + (c.qty * c.normalPrice), 0);
     const total = this._cart.reduce((a,c) => a + c.subtotal, 0);
     const discountTotal = Math.max(0, subtotal - total);
@@ -722,16 +726,33 @@ window.Modules.sales = {
       payments: [],
       totalPaid: 0,
       totalPending: total,
-      stockDeducted: false,
+      stockDeducted: true,
       deliveryStatus: 'no_retirado',
       notes
     };
 
     DB.add('sales', sale);
 
+    // Descontar inventario inmediatamente para reservar los productos cotizados
+    for (const item of this._cart) {
+      const p = DB.findById('products', item.productId);
+      if (p) {
+        DB.deductStock(item.productId, item.qty);
+        DB.logMovement({
+          productId: p.id,
+          productName: p.name,
+          qty: -item.qty,
+          type: 'Cotización / Reserva',
+          reason: `Cotización ${invoiceNumber} para ${customerName} (Stock reservado)`,
+          value: total
+        });
+      }
+    }
+
     this._cart = [];
     this._renderCart();
-    Utils.showToast(`Factura ${invoiceNumber} guardada como PENDIENTE. El stock NO fue descontado.`, 'warning');
+    this._renderProducts();
+    Utils.showToast(`Factura ${invoiceNumber} guardada como PENDIENTE. Los productos fueron descontados y reservados del inventario.`, 'warning');
     this._renderStats();
     this._renderSalesTable();
   },
@@ -807,20 +828,26 @@ window.Modules.sales = {
       totalPaid: normalizedPaid,
       totalPending: normalizedPending,
       paidAt: isFullyPaid ? Utils.nowISO() : null,
-      stockDeducted: isFullyPaid,
+      stockDeducted: true,
       deliveryStatus: isFullyPaid ? 'retirada' : 'no_retirado',
       notes
     };
 
     DB.add('sales', sale);
 
-    if (isFullyPaid) {
-      for (const item of this._cart) {
-        const p = DB.findById('products', item.productId);
-        if (p) {
-          DB.deductStock(item.productId, item.qty);
-          DB.logMovement({ productId: p.id, productName: p.name, qty: -item.qty, type: 'Venta', reason: `Venta ${invoiceNumber} (abono inicial completo)`, value: total });
-        }
+    // Descontar inventario inmediatamente para reservar los productos vendidos con abono
+    for (const item of this._cart) {
+      const p = DB.findById('products', item.productId);
+      if (p) {
+        DB.deductStock(item.productId, item.qty);
+        DB.logMovement({
+          productId: p.id,
+          productName: p.name,
+          qty: -item.qty,
+          type: isFullyPaid ? 'Venta' : 'Venta con Abono',
+          reason: `Factura ${invoiceNumber} para ${customerName} (Stock reservado)`,
+          value: total
+        });
       }
     }
 
@@ -858,16 +885,24 @@ window.Modules.sales = {
       ? sale.totalPaid
       : (sale.status === 'pendiente' ? 0 : sale.total);
 
-    // Restore inventory only when the sale had already reserved stock.
-    const stockWasDeducted = sale.stockDeducted ||
-      (!['pendiente', 'con_abono'].includes(sale.status) && paidAmount > 0);
-    if (stockWasDeducted) sale.items.forEach(it => {
-      const p = DB.findById('products', it.productId);
-      if (p) {
-        DB.restoreStock(it.productId, it.qty);
-        DB.logMovement({ productId: it.productId, productName: it.name, qty: it.qty, type: 'Anulación Venta', reason: `Anulación de Venta ${sale.invoiceNumber}`, value: paidAmount });
-      }
-    });
+    // Reintegrar stock al inventario (todas las ventas y cotizaciones reservan stock)
+    const stockWasDeducted = sale.stockDeducted !== false;
+    if (stockWasDeducted) {
+      sale.items.forEach(it => {
+        const p = DB.findById('products', it.productId);
+        if (p) {
+          DB.restoreStock(it.productId, it.qty);
+          DB.logMovement({
+            productId: it.productId,
+            productName: it.name,
+            qty: it.qty,
+            type: 'Anulación Factura / Cotización',
+            reason: `Anulación de ${sale.status === 'pendiente' ? 'Cotización' : 'Venta'} ${sale.invoiceNumber} (Stock reintegrado)`,
+            value: paidAmount
+          });
+        }
+      });
+    }
 
     // Reverse only the money actually received from this invoice.
     if (paidAmount > 0) DB.add('cash_movements', {

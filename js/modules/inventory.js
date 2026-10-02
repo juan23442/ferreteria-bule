@@ -234,17 +234,21 @@ window.Modules.inventory = {
     document.getElementById('btn-export-inv').addEventListener('click', () => self._export());
   },
 
-  _renderSummary(summary) {
+  _renderSummary(summary = {}) {
     const localProducts = DB.getAll('products');
     const localCost = localProducts.reduce((sum, product) => sum + (Number(product.costPrice) || 0) * (Number(product.stock) || 0), 0);
+    const localSale = localProducts.reduce((sum, product) => sum + (Number(product.salePrice) || 0) * (Number(product.stock) || 0), 0);
+    const localLowStock = localProducts.filter(p => Number(p.stock) > 0 && Number(p.stock) <= Number(p.minStock || 3)).length;
+    const localOutStock = localProducts.filter(p => Number(p.stock) <= 0).length;
+
     const total = document.getElementById('inv-total-count');
     const cost = document.getElementById('inv-cost-total');
     const sale = document.getElementById('inv-sale-total');
     const alerts = document.getElementById('inv-alert-count');
-    if (total) total.textContent = Number(summary.total || 0).toLocaleString('es-CO');
-    if (cost) cost.textContent = Utils.formatCurrency(Number(summary.cost) || localCost);
-    if (sale) sale.textContent = Utils.formatCurrency(summary.sale || 0);
-    if (alerts) alerts.textContent = (Number(summary.lowStock || 0) + Number(summary.outStock || 0)).toLocaleString('es-CO');
+    if (total) total.textContent = (summary.total != null ? Number(summary.total) : localProducts.length).toLocaleString('es-CO');
+    if (cost) cost.textContent = Utils.formatCurrency(summary.cost != null ? Number(summary.cost) : localCost);
+    if (sale) sale.textContent = Utils.formatCurrency(summary.sale != null ? Number(summary.sale) : localSale);
+    if (alerts) alerts.textContent = (summary.lowStock != null && summary.outStock != null ? (Number(summary.lowStock) + Number(summary.outStock)) : (localLowStock + localOutStock)).toLocaleString('es-CO');
   },
 
   _validateCodeLive() {

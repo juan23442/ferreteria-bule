@@ -30,9 +30,45 @@ const Utils = {
     return d.toLocaleString('es-CO', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
   },
 
-  today() { return new Date().toISOString().split('T')[0]; },
+  // Fecha local exacta en formato YYYY-MM-DD (sin desfase UTC)
+  today() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  },
 
-  nowISO() { return new Date().toISOString(); },
+  // Fecha y hora local exacta en formato ISO
+  nowISO() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  },
+
+  // Parsea cadenas YYYY-MM-DD como fecha local pura (evitando desfaces de zona horaria)
+  parseLocalDate(dateStr) {
+    if (!dateStr) return new Date();
+    const parts = String(dateStr).split('T')[0].split('-');
+    if (parts.length === 3) {
+      return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+    return new Date(dateStr);
+  },
+
+  // Obtiene el rango de la semana actual (Lunes a Domingo) en fechas locales
+  getCurrentWeekRange() {
+    const d = new Date();
+    const dayOfWeek = d.getDay();
+    const diffToMonday = (dayOfWeek + 6) % 7;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - diffToMonday);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+
+    const pad = (n) => String(n).padStart(2, '0');
+    const monStr = `${monday.getFullYear()}-${pad(monday.getMonth() + 1)}-${pad(monday.getDate())}`;
+    const sunStr = `${sunday.getFullYear()}-${pad(sunday.getMonth() + 1)}-${pad(sunday.getDate())}`;
+    return [monStr, sunStr];
+  },
 
   generateId(prefix = 'id') {
     return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`;

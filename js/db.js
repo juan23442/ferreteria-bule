@@ -521,14 +521,47 @@ const DB = (() => {
 
       this.cleanupOrphanExpenseMovements();
 
-      // Migrate products
+      // Consolidar variantes y asegurar stock en productos principales
       const products = this.getAll('products');
       let prodUpdated = false;
+      const productsToKeep = [];
+
       products.forEach(p => {
+        if (p.parentProductId) {
+          const parent = products.find(x => x.id === p.parentProductId);
+          if (parent) {
+            if (!parent.batches) parent.batches = [];
+            if (p.batches && p.batches.length > 0) {
+              p.batches.forEach(b => {
+                if (!parent.batches.some(pb => pb.id === b.id)) parent.batches.push(b);
+              });
+            } else if (p.stock > 0) {
+              parent.batches.push({
+                id: `batch_${p.id}`,
+                batchNumber: parent.batches.length + 1,
+                label: p.name,
+                changeType: 'REGULAR',
+                costPrice: p.costPrice || 0,
+                salePrice: p.salePrice || parent.salePrice || 0,
+                initialQty: p.stock,
+                stock: p.stock,
+                date: p.createdAt || Utils.today(),
+                supplier: p.supplier || ''
+              });
+            }
+            parent.stock = parent.batches.reduce((sum, b) => sum + (b.stock || 0), 0);
+            prodUpdated = true;
+            return; // No conservar el producto duplicado
+          }
+        }
         if (p.brand === undefined) { p.brand = ''; prodUpdated = true; }
         if (p.active === undefined) { p.active = true; prodUpdated = true; }
+        productsToKeep.push(p);
       });
-      if (prodUpdated) this.save('products', products);
+
+      if (prodUpdated || productsToKeep.length !== products.length) {
+        this.save('products', productsToKeep);
+      }
 
       // Migrate sales
       const sales = this.getAll('sales');
@@ -547,6 +580,32 @@ const DB = (() => {
           salesUpdated = true;
         }
       });
+
+      // Migrar y descontar stock de cotizaciones pendientes previas si no se les había descontado
+      const pendingSalesToDeduct = this.getAll('sales').filter(s =>
+        (s.status === 'pendiente' || s.status === 'con_abono') && s.stockDeducted === false
+      );
+      if (pendingSalesToDeduct.length > 0) {
+        pendingSalesToDeduct.forEach(s => {
+          (s.items || []).forEach(it => {
+            const p = this.findById('products', it.productId);
+            if (p) {
+              this.deductStock(it.productId, it.qty);
+              this.logMovement({
+                productId: p.id,
+                productName: p.name,
+                qty: -it.qty,
+                type: 'Cotización / Reserva',
+                reason: `Reserva de stock para Cotización ${s.invoiceNumber} (${s.customerName})`,
+                value: s.total
+              });
+            }
+          });
+          s.stockDeducted = true;
+          salesUpdated = true;
+        });
+      }
+
       if (salesUpdated) this.save('sales', sales);
 
       try {

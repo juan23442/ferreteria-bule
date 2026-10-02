@@ -6,11 +6,11 @@ const path = require('path');
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
-app.use('/css', express.static('css', { maxAge: '1h' }));
-app.use('/js', express.static('js', { maxAge: '1h' }));
-app.use('/assets', express.static('assets', { maxAge: '1h' }));
-app.use('/data', express.static('data', { maxAge: '1h' }));
-app.use(express.static('public'));
+app.use('/css', express.static('css', { maxAge: 0, setHeaders: (res) => res.set('Cache-Control', 'no-store, no-cache, must-revalidate') }));
+app.use('/js', express.static('js', { maxAge: 0, setHeaders: (res) => res.set('Cache-Control', 'no-store, no-cache, must-revalidate') }));
+app.use('/assets', express.static('assets', { maxAge: 0 }));
+app.use('/data', express.static('data', { maxAge: 0 }));
+app.use(express.static('public', { maxAge: 0, setHeaders: (res) => res.set('Cache-Control', 'no-store, no-cache, must-revalidate') }));
 
 // Configuracion de la conexion a Supabase (PostgreSQL)
 const pool = new Pool({
@@ -93,6 +93,26 @@ app.post('/api/state', async (req, res) => {
       INSERT INTO app_state (id, state, updated_at) VALUES (1, $1::jsonb, NOW())
       ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state, updated_at = NOW()
     `, [JSON.stringify(state)]);
+
+    // Sincronizar en segundo plano cada producto en la tabla productos
+    if (Array.isArray(state.products) && state.products.length > 0) {
+      (async () => {
+        for (const p of state.products) {
+          if (p.code && p.name) {
+            await pool.query(`
+              INSERT INTO productos (codigo, nombre, precio, stock, costo)
+              VALUES ($1, $2, $3, $4, $5)
+              ON CONFLICT (codigo) DO UPDATE SET
+                nombre = EXCLUDED.nombre,
+                precio = EXCLUDED.precio,
+                stock = EXCLUDED.stock,
+                costo = EXCLUDED.costo
+            `, [p.code, p.name, Number(p.salePrice) || 0, Number(p.stock) || 0, Number(p.costPrice) || 0]).catch(() => {});
+          }
+        }
+      })().catch(err => console.error('Error sincronizando productos con PostgreSQL:', err.message));
+    }
+
     res.status(204).end();
   } catch (err) {
     console.error(err);
@@ -111,11 +131,24 @@ app.get('/api/productos', async (req, res) => {
   }
 });
 
-// Compatibilidad con los módulos de la aplicación original.
+// Compatibilidad con los módulos de la aplicación original (lee de app_state para datos en tiempo real)
 app.get('/api/products', async (req, res) => {
   try {
     const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
     const pageSize = Math.min(100, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 50));
+    
+    // Intentar leer de app_state primero
+    const stateResult = await pool.query('SELECT state FROM app_state WHERE id = 1');
+    const stateProducts = stateResult.rows[0]?.state?.products;
+
+    if (Array.isArray(stateProducts) && stateProducts.length > 0) {
+      const query = String(req.query.q || '').trim().toLowerCase();
+      const filtered = stateProducts.filter(p => !query || `${p.code} ${p.name} ${p.brand || ''}`.toLowerCase().includes(query));
+      const start = (page - 1) * pageSize;
+      const items = filtered.slice(start, start + pageSize);
+      return res.json({ items, total: filtered.length, page, pageSize, pages: Math.max(1, Math.ceil(filtered.length / pageSize)) });
+    }
+
     const result = await pool.query('SELECT id, codigo, nombre, precio, stock, costo FROM productos ORDER BY id ASC');
     const query = String(req.query.q || '').trim().toLowerCase();
     const filtered = result.rows.filter(product => !query || `${product.codigo} ${product.nombre}`.toLowerCase().includes(query));
@@ -139,6 +172,18 @@ app.get('/api/products', async (req, res) => {
 
 app.get('/api/products/summary', async (req, res) => {
   try {
+    const stateResult = await pool.query('SELECT state FROM app_state WHERE id = 1');
+    const stateProducts = stateResult.rows[0]?.state?.products;
+
+    if (Array.isArray(stateProducts) && stateProducts.length > 0) {
+      const total = stateProducts.length;
+      const cost = stateProducts.reduce((sum, p) => sum + (Number(p.costPrice) || 0) * (Number(p.stock) || 0), 0);
+      const sale = stateProducts.reduce((sum, p) => sum + (Number(p.salePrice) || 0) * (Number(p.stock) || 0), 0);
+      const outStock = stateProducts.filter(p => Number(p.stock) <= 0).length;
+      const lowStock = stateProducts.filter(p => Number(p.stock) > 0 && Number(p.stock) <= (Number(p.minStock) || 3)).length;
+      return res.json({ total, cost, sale, outStock, lowStock });
+    }
+
     const result = await pool.query(`
       SELECT
         COUNT(*)::int AS total,

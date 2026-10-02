@@ -268,8 +268,8 @@ window.Modules.invoices = {
       </table>`;
     } else if (s.status === 'pendiente') {
       html += `<div style="background:#fef3c7;border:1px solid #f59e0b;padding:12px 16px;border-radius:8px;color:#92400e;font-size:13px;margin-bottom:12px">
-        🕐 <strong>Factura pendiente:</strong> No se ha registrado ningún pago todavía.
-        El stock del inventario <strong>NO ha sido descontado</strong> hasta completar el pago.
+        🕐 <strong>Factura / Cotización pendiente:</strong> No se ha registrado ningún pago todavía.
+        Los productos <strong>ya están descontados y reservados</strong> en el inventario para esta cotización.
       </div>`;
     }
 
@@ -348,20 +348,6 @@ window.Modules.invoices = {
     const prevPaid    = s.totalPaid || 0;
     const newTotalPaid = prevPaid + amount;
     const newPending   = Math.max(0, previousBalance - amount);
-    const isFullyPaid  = newPending < 0.01;
-
-    if (isFullyPaid && (s.status === 'pendiente' || s.status === 'con_abono')) {
-      const unavailable = (s.items || []).find(item => {
-        const product = DB.findById('products', item.productId);
-        return !product || product.stock < item.qty;
-      });
-      if (unavailable) {
-        const product = DB.findById('products', unavailable.productId);
-        Utils.showToast(`Stock insuficiente para "${unavailable.name}" (hay ${product ? product.stock : 0}, necesita ${unavailable.qty}). Ajusta el inventario antes de completar el pago.`, 'error');
-        return;
-      }
-    }
-
     const payments = s.payments || [];
     payments.push({
       id: Utils.generateId('pay'),
@@ -379,8 +365,8 @@ window.Modules.invoices = {
 
     if (isFullyPaid) {
       newStatus = 'pagada';
-      // Al pagar completo: descontar stock del inventario y registrar en caja
-      if (s.status === 'pendiente' || s.status === 'con_abono') {
+      // Si por alguna razón una factura antigua no tenía stock descontado, descontarlo ahora
+      if (s.stockDeducted === false) {
         (s.items || []).forEach(it => {
           const p = DB.findById('products', it.productId);
           if (p) {
