@@ -70,6 +70,29 @@ const Utils = {
     return [monStr, sunStr];
   },
 
+  // Extrae la fecha YYYY-MM-DD local limpia de cualquier formato, ISO o timestamp
+  extractDate(dateOrIso) {
+    if (!dateOrIso) return '';
+    const str = String(dateOrIso).trim();
+    if (str.includes('T')) {
+      if (str.endsWith('Z') || str.includes('+') || (str.includes('-') && str.indexOf('-', 10) > 0)) {
+        const d = new Date(str);
+        if (!isNaN(d.getTime())) {
+          const pad = (n) => String(n).padStart(2, '0');
+          return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        }
+      }
+      return str.split('T')[0];
+    }
+    return str.split(' ')[0];
+  },
+
+  // Valida estrictamente si una fecha o registro pertenece al día actual en curso (00:00 a 23:59)
+  isToday(dateOrIso) {
+    if (!dateOrIso) return false;
+    return this.extractDate(dateOrIso) === this.today();
+  },
+
   generateId(prefix = 'id') {
     return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`;
   },

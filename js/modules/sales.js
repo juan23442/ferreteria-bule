@@ -193,15 +193,18 @@ window.Modules.sales = {
 
     switch (this._periodFilter) {
       case 'today':
-        return sales.filter(s => s.date === today);
+        return sales.filter(s => Utils.isToday(s.date || s.datetime));
       case 'week':
-        return sales.filter(s => s.date >= monStr && s.date <= sunStr);
+        return sales.filter(s => {
+          const d = Utils.extractDate(s.date || s.datetime);
+          return d >= monStr && d <= sunStr;
+        });
       case 'month':
-        return sales.filter(s => s.date && s.date.startsWith(today.slice(0, 7)));
+        return sales.filter(s => Utils.extractDate(s.date || s.datetime).startsWith(today.slice(0, 7)));
       case 'year':
-        return sales.filter(s => s.date && s.date.startsWith(today.slice(0, 4)));
+        return sales.filter(s => Utils.extractDate(s.date || s.datetime).startsWith(today.slice(0, 4)));
       case 'custom':
-        return sales.filter(s => Utils.dateInRange(s.date, this._fromDate, this._toDate));
+        return sales.filter(s => Utils.dateInRange(Utils.extractDate(s.date || s.datetime), this._fromDate, this._toDate));
       default:
         return sales;
     }

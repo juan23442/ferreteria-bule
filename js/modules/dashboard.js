@@ -19,11 +19,14 @@ window.Modules.dashboard = {
     const monthStr = today.slice(0, 7);
     const yearStr = today.slice(0, 4);
 
-    // Sales Metrics (Filtrado exacto por fecha local)
-    const todaySales = sales.filter(s => s.date === today);
-    const weekSales  = sales.filter(s => s.date >= monStr && s.date <= sunStr);
-    const monthSales = sales.filter(s => s.date && s.date.startsWith(monthStr));
-    const yearSales  = sales.filter(s => s.date && s.date.startsWith(yearStr));
+    // Sales Metrics (Filtrado estricto por fecha local actual)
+    const todaySales = sales.filter(s => Utils.isToday(s.date || s.datetime));
+    const weekSales  = sales.filter(s => {
+      const d = Utils.extractDate(s.date || s.datetime);
+      return d >= monStr && d <= sunStr;
+    });
+    const monthSales = sales.filter(s => Utils.extractDate(s.date || s.datetime).startsWith(monthStr));
+    const yearSales  = sales.filter(s => Utils.extractDate(s.date || s.datetime).startsWith(yearStr));
 
     const todayTotal = Utils.sum(todaySales, 'total');
     const weekTotal  = Utils.sum(weekSales, 'total');
@@ -237,16 +240,17 @@ window.Modules.dashboard = {
 
     let filtered = sales;
     if (this._salesPeriod === 'today') {
-      filtered = sales.filter(s => s.date === today);
+      filtered = sales.filter(s => Utils.isToday(s.date || s.datetime));
     } else if (this._salesPeriod === 'week') {
-      const dayOfWeek = d.getDay();
-      const monday = new Date(d); monday.setDate(d.getDate() - ((dayOfWeek + 6) % 7));
-      const monStr = monday.toISOString().split('T')[0];
-      filtered = sales.filter(s => s.date >= monStr);
+      const [monStr, sunStr] = Utils.getCurrentWeekRange();
+      filtered = sales.filter(s => {
+        const dt = Utils.extractDate(s.date || s.datetime);
+        return dt >= monStr && dt <= sunStr;
+      });
     } else if (this._salesPeriod === 'month') {
-      filtered = sales.filter(s => s.date && s.date.startsWith(today.slice(0,7)));
+      filtered = sales.filter(s => Utils.extractDate(s.date || s.datetime).startsWith(today.slice(0,7)));
     } else if (this._salesPeriod === 'year') {
-      filtered = sales.filter(s => s.date && s.date.startsWith(today.slice(0,4)));
+      filtered = sales.filter(s => Utils.extractDate(s.date || s.datetime).startsWith(today.slice(0,4)));
     }
 
     if (filtered.length === 0) {

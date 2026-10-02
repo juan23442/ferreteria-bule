@@ -66,10 +66,10 @@ window.Modules.reports = {
   _generateReport() {
     const [from, to] = this._getDateRange();
 
-    const sales = DB.getAll('sales').filter(s => s.status !== 'anulada' && Utils.dateInRange(s.date, from, to));
-    const purchases = DB.getAll('purchases').filter(p => Utils.dateInRange(p.date, from, to));
-    const expenses = DB.getAll('expenses').filter(e => Utils.dateInRange(e.date, from, to));
-    const cashMovs = DB.getAll('cash_movements').filter(m => Utils.dateInRange(m.date, from, to));
+    const sales = DB.getAll('sales').filter(s => s.status !== 'anulada' && Utils.dateInRange(Utils.extractDate(s.date || s.datetime), from, to));
+    const purchases = DB.getAll('purchases').filter(p => Utils.dateInRange(Utils.extractDate(p.date || p.datetime), from, to));
+    const expenses = DB.getAll('expenses').filter(e => Utils.dateInRange(Utils.extractDate(e.date || e.datetime), from, to));
+    const cashMovs = DB.getAll('cash_movements').filter(m => Utils.dateInRange(Utils.extractDate(m.date || m.datetime), from, to));
 
     const totalRevenue = sales.reduce((a, s) => a + (s.totalPaid != null ? s.totalPaid : s.total), 0);
     const totalCost = sales.reduce((a,s) => {

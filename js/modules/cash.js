@@ -10,7 +10,7 @@ window.Modules.cash = {
   render() {
     const movs = DB.getAll('cash_movements');
     const today = Utils.today();
-    const todayMovs = movs.filter(m => m.date === today);
+    const todayMovs = movs.filter(m => Utils.isToday(m.date || m.datetime));
     const todayIn = todayMovs.filter(m => m.type === 'ingreso').reduce((a,m) => a + m.amount, 0);
     const todayOut = todayMovs.filter(m => m.type === 'egreso').reduce((a,m) => a + m.amount, 0);
     const balance = DB.getCashBalance();

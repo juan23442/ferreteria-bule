@@ -228,9 +228,9 @@
     // Display current date
     updateHeaderDate();
 
-    // Detección automática de cambio de día (para que al pasar la medianoche se actualice a un nuevo día)
+    // Detección y refresco exacto a las 12:00 de la medianoche (00:00:00)
     let lastKnownDate = Utils.today();
-    setInterval(() => {
+    function checkDayChange() {
       const currentDate = Utils.today();
       if (currentDate !== lastKnownDate) {
         lastKnownDate = currentDate;
@@ -239,18 +239,24 @@
           navigate(currentPage, true);
         }
       }
-    }, 15000); // Chequeo cada 15 segundos
+    }
+
+    function scheduleMidnightTimer() {
+      const now = new Date();
+      const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 100);
+      const msUntilMidnight = Math.max(500, nextMidnight.getTime() - now.getTime());
+      setTimeout(() => {
+        checkDayChange();
+        scheduleMidnightTimer();
+      }, msUntilMidnight);
+    }
+    scheduleMidnightTimer();
+
+    setInterval(checkDayChange, 3000); // Chequeo continuo cada 3 segundos
 
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
-        const currentDate = Utils.today();
-        if (currentDate !== lastKnownDate) {
-          lastKnownDate = currentDate;
-          updateHeaderDate();
-          if (currentPage && window.Modules[currentPage]) {
-            navigate(currentPage, true);
-          }
-        }
+        checkDayChange();
       }
     });
 

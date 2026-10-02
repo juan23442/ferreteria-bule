@@ -11,9 +11,9 @@ window.Modules.expenses = {
     const month = today.slice(0, 7);
     const year = today.slice(0, 4);
 
-    const todayExp = expenses.filter(e => e.date === today);
-    const monthExp = expenses.filter(e => e.date && e.date.startsWith(month));
-    const yearExp = expenses.filter(e => e.date && e.date.startsWith(year));
+    const todayExp = expenses.filter(e => Utils.isToday(e.date || e.datetime));
+    const monthExp = expenses.filter(e => Utils.extractDate(e.date || e.datetime).startsWith(month));
+    const yearExp = expenses.filter(e => Utils.extractDate(e.date || e.datetime).startsWith(year));
 
     const todayTotal = Utils.sum(todayExp, 'amount');
     const monthTotal = Utils.sum(monthExp, 'amount');
