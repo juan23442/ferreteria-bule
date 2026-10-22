@@ -136,5 +136,190 @@ window.PrintModule = {
     w.document.write(html);
     w.document.close();
     setTimeout(() => w.print(), 500);
+  },
+
+  printInvoicesReport({ sales, periodLabel, statusLabel }) {
+    const s = DB.getSettings();
+    const logoHtml = s.logo ? `<img src="${s.logo}" style="max-height:60px;max-width:140px;object-fit:contain;margin-bottom:6px">` : '';
+
+    const list = sales || [];
+    const totalCount = list.length;
+    const totalFacturado = list.reduce((a, x) => a + (x.total || 0), 0);
+    const totalRecaudado = list
+      .filter(x => x.status !== 'anulada')
+      .reduce((a, x) => a + (x.totalPaid != null ? x.totalPaid : (x.status === 'pendiente' ? 0 : x.total)), 0);
+    const totalPendiente = list
+      .filter(x => x.status !== 'anulada')
+      .reduce((a, x) => a + (x.totalPending != null ? x.totalPending : (x.status === 'pendiente' ? x.total : 0)), 0);
+
+    const rowsHtml = list.map((inv, idx) => {
+      const itemsCount = (inv.items || []).reduce((a, it) => a + (it.qty || 1), 0);
+      const paid = inv.totalPaid != null ? inv.totalPaid : (inv.status === 'pendiente' ? 0 : inv.total);
+      const pending = inv.totalPending != null ? inv.totalPending : (inv.status === 'pendiente' ? inv.total : 0);
+
+      // Color/badge para estado
+      let stBg = '#e2e8f0';
+      let stColor = '#334155';
+      if (inv.status === 'pagada' || inv.status === 'completada') { stBg = '#dcfce7'; stColor = '#166534'; }
+      else if (inv.status === 'pendiente') { stBg = '#fef3c7'; stColor = '#92400e'; }
+      else if (inv.status === 'con_abono') { stBg = '#ffedd5'; stColor = '#9a3412'; }
+      else if (inv.status === 'anulada') { stBg = '#fee2e2'; stColor = '#991b1b'; }
+      else if (inv.status === 'pagada_no_retirada') { stBg = '#e0f2fe'; stColor = '#0369a1'; }
+      else if (inv.status === 'retirada') { stBg = '#f1f5f9'; stColor = '#475569'; }
+
+      const stLabel = inv.status ? inv.status.toUpperCase().replace(/_/g, ' ') : 'DESCONOCIDO';
+
+      return `
+      <tr>
+        <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:center">${idx + 1}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#0f172a">${Utils.escHtml(inv.invoiceNumber)}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;white-space:nowrap">${Utils.formatDatetime(inv.datetime)}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;font-weight:600">${Utils.escHtml(inv.customerName || 'Cliente General')}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:center">${itemsCount} und</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-transform:uppercase;font-size:11px">${Utils.escHtml(inv.paymentMethod || 'Efectivo')}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:center">
+          <span style="background:${stBg};color:${stColor};padding:3px 8px;border-radius:6px;font-size:10.5px;font-weight:700;display:inline-block">${stLabel}</span>
+        </td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700">${Utils.formatCurrency(inv.total)}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:right;color:#16a34a;font-weight:700">${Utils.formatCurrency(paid)}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:right;color:${pending > 0 ? '#dc2626' : '#64748b'};font-weight:700">${pending > 0 ? Utils.formatCurrency(pending) : '—'}</td>
+      </tr>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Reporte de Facturación - ${Utils.escHtml(periodLabel || 'Ferretería El Bule')}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; color: #0f172a; font-size: 12px; padding: 24px; background: #fff; line-height: 1.4; }
+    .report-container { max-width: 1100px; margin: 0 auto; }
+    .print-actions { text-align: center; margin-bottom: 20px; }
+    .btn-print { background: #f59e0b; color: #000; font-weight: 700; border: none; padding: 10px 22px; border-radius: 8px; cursor: pointer; font-size: 13px; margin: 0 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+    .btn-pdf { background: #2563eb; color: #fff; font-weight: 700; border: none; padding: 10px 22px; border-radius: 8px; cursor: pointer; font-size: 13px; margin: 0 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #2563eb; padding-bottom: 16px; margin-bottom: 18px; }
+    .company-name { font-size: 22px; font-weight: 900; color: #1e3a8a; text-transform: uppercase; letter-spacing: 0.5px; }
+    .company-info { font-size: 11.5px; color: #475569; line-height: 1.5; margin-top: 4px; }
+    .report-meta { text-align: right; }
+    .report-title { font-size: 19px; font-weight: 900; color: #0f172a; text-transform: uppercase; margin-bottom: 4px; }
+    .period-badge { background: #dbeafe; color: #1e40af; padding: 4px 12px; border-radius: 6px; font-weight: 800; font-size: 13px; display: inline-block; margin-bottom: 6px; border: 1px solid #bfdbfe; }
+    .meta-line { font-size: 11.5px; color: #64748b; }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+    .kpi-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; text-align: center; }
+    .kpi-label { font-size: 11px; text-transform: uppercase; font-weight: 700; color: #64748b; margin-bottom: 4px; }
+    .kpi-value { font-size: 18px; font-weight: 900; color: #0f172a; }
+    .kpi-value.blue { color: #2563eb; }
+    .kpi-value.green { color: #16a34a; }
+    .kpi-value.red { color: #dc2626; }
+
+    table { width: 100%; border-collapse: collapse; margin-bottom: 18px; font-size: 11.5px; }
+    thead th { background: #1e293b; color: white; padding: 8px 10px; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.4px; font-weight: 700; }
+    tbody tr:nth-child(even) { background: #f8fafc; }
+    tfoot td { background: #f1f5f9; padding: 10px; font-size: 12px; font-weight: 900; border-top: 2px solid #cbd5e1; }
+
+    .footer { text-align: center; border-top: 1px dashed #cbd5e1; padding-top: 14px; font-size: 11px; color: #64748b; margin-top: 20px; }
+
+    @media print {
+      .print-actions { display: none !important; }
+      body { padding: 0; background: #fff; }
+      @page { margin: 10mm; size: landscape; }
+      table { page-break-inside: auto; }
+      tr { page-break-inside: avoid; page-break-after: auto; }
+      thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="print-actions">
+    <button class="btn-print" onclick="window.print()">🖨️ Imprimir Reporte</button>
+    <button class="btn-pdf" onclick="window.print()">📄 Guardar como PDF</button>
+  </div>
+
+  <div class="report-container">
+    <div class="header">
+      <div class="company">
+        ${logoHtml}
+        <div class="company-name">${Utils.escHtml(s.companyName)}</div>
+        <div class="company-info">
+          ${s.nit ? `<strong>NIT:</strong> ${Utils.escHtml(s.nit)}<br>` : ''}
+          ${s.address ? `<strong>Dirección:</strong> ${Utils.escHtml(s.address)}<br>` : ''}
+          ${s.phone ? `<strong>Teléfono:</strong> ${Utils.escHtml(s.phone)}` : ''}
+        </div>
+      </div>
+      <div class="report-meta">
+        <div class="report-title">Reporte de Facturación</div>
+        <div class="period-badge">📅 ${Utils.escHtml(periodLabel || 'Todos los registros')}</div>
+        <div class="meta-line"><strong>Estado:</strong> ${Utils.escHtml(statusLabel || 'Todos')}</div>
+        <div class="meta-line"><strong>Generado:</strong> ${Utils.formatDatetime(Utils.nowISO())}</div>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Facturas</div>
+        <div class="kpi-value blue">${totalCount}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Facturado</div>
+        <div class="kpi-value">${Utils.formatCurrency(totalFacturado)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Recaudado (Caja)</div>
+        <div class="kpi-value green">${Utils.formatCurrency(totalRecaudado)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Saldo Pendiente</div>
+        <div class="kpi-value red">${Utils.formatCurrency(totalPendiente)}</div>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:35px;text-align:center">#</th>
+          <th style="text-align:left">Nº Factura</th>
+          <th style="text-align:left">Fecha / Hora</th>
+          <th style="text-align:left">Cliente</th>
+          <th style="text-align:center">Items</th>
+          <th style="text-align:left">Método</th>
+          <th style="text-align:center">Estado</th>
+          <th style="text-align:right">Total</th>
+          <th style="text-align:right">Abonado</th>
+          <th style="text-align:right">Saldo</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml.length ? rowsHtml : `<tr><td colspan="10" style="text-align:center;padding:24px;color:#64748b">No se encontraron facturas para el período seleccionado.</td></tr>`}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="4" style="text-align:left">TOTALES GENERALES (${totalCount} facturas)</td>
+          <td style="text-align:center">${list.reduce((a, x) => a + (x.items || []).reduce((b, it) => b + (it.qty || 1), 0), 0)} und</td>
+          <td colspan="2"></td>
+          <td style="text-align:right;color:#0f172a">${Utils.formatCurrency(totalFacturado)}</td>
+          <td style="text-align:right;color:#16a34a">${Utils.formatCurrency(totalRecaudado)}</td>
+          <td style="text-align:right;color:#dc2626">${Utils.formatCurrency(totalPendiente)}</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <div class="footer">
+      Reporte oficial generado por el Sistema Administrativo de ${Utils.escHtml(s.companyName)} — Documento válido para auditoría interna y control contable.
+    </div>
+  </div>
+
+</body>
+</html>`;
+
+    const w = window.open('', '_blank');
+    if (!w) { Utils.showToast('No se pudo abrir la ventana para el reporte. Permita ventanas emergentes en el navegador.', 'error'); return; }
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => w.print(), 500);
   }
 };
+

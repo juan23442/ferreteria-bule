@@ -6,41 +6,87 @@
 
 window.Modules = window.Modules || {};
 window.Modules.invoices = {
+  _currentStatusFilter: '',
+  _currentPeriod: 'all',
 
   render() {
-    const sales = DB.getAll('sales');
-    const totalInvoices = sales.length;
-    const totalRevenue = sales.filter(s => s.status !== 'anulada' && s.status !== 'pendiente').reduce((a,s) => a + (s.totalPaid || s.total), 0);
-    const pending = sales.filter(s => s.status === 'pendiente' || s.status === 'con_abono').length;
-    const annulled = sales.filter(s => s.status === 'anulada').length;
-    const pendingBalance = sales
-      .filter(s => s.status === 'pendiente' || s.status === 'con_abono')
-      .reduce((a, s) => a + (s.totalPending != null ? s.totalPending : s.total), 0);
+    const today = Utils.today();
+    const currentMonth = today.slice(0, 7);
+    const currentYear = today.slice(0, 4);
 
     return `
-    <!-- Tarjetas de Resumen -->
+    <!-- Tarjetas de Resumen Dinámicas -->
     <div class="grid-4 mb-24">
       <div class="stat-card">
         <div class="stat-icon blue">📄</div>
-        <div class="stat-info"><div class="stat-label">Total Facturas</div><div class="stat-value">${totalInvoices}</div></div>
+        <div class="stat-info">
+          <div class="stat-label">Total Facturas <span id="inv-period-badge" class="badge badge-info" style="font-size:10px;padding:2px 6px">Todas</span></div>
+          <div class="stat-value" id="inv-stat-count">0</div>
+        </div>
       </div>
       <div class="stat-card">
         <div class="stat-icon green">💰</div>
-        <div class="stat-info"><div class="stat-label">Total Recaudado</div><div class="stat-value success">${Utils.formatCurrency(totalRevenue)}</div></div>
+        <div class="stat-info">
+          <div class="stat-label">Total Recaudado (Caja)</div>
+          <div class="stat-value success" id="inv-stat-revenue">$ 0</div>
+        </div>
       </div>
       <div class="stat-card">
         <div class="stat-icon yellow">🕐</div>
-        <div class="stat-info"><div class="stat-label">Pendientes / Abonadas</div><div class="stat-value warning">${pending}</div></div>
+        <div class="stat-info">
+          <div class="stat-label">Pendientes / Abonadas</div>
+          <div class="stat-value warning" id="inv-stat-pending">0</div>
+        </div>
       </div>
       <div class="stat-card">
         <div class="stat-icon red">⚠️</div>
-        <div class="stat-info"><div class="stat-label">Saldo Pendiente Total</div><div class="stat-value danger">${Utils.formatCurrency(pendingBalance)}</div></div>
+        <div class="stat-info">
+          <div class="stat-label">Saldo Pendiente Total</div>
+          <div class="stat-value danger" id="inv-stat-balance">$ 0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Barra de Filtros de Período -->
+    <div class="card mb-16" style="padding:12px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px">
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+          <span style="font-weight:800;font-size:13px;color:var(--text);display:flex;align-items:center;gap:4px">📅 Período:</span>
+          <button class="btn btn-sm btn-secondary inv-period-btn active" data-period="all">📋 Todas</button>
+          <button class="btn btn-sm btn-secondary inv-period-btn" data-period="today">☀️ Día (Hoy)</button>
+          <button class="btn btn-sm btn-secondary inv-period-btn" data-period="week">📆 Esta Semana</button>
+          <button class="btn btn-sm btn-secondary inv-period-btn" data-period="month">🗓️ Mes</button>
+          <button class="btn btn-sm btn-secondary inv-period-btn" data-period="year">📊 Año</button>
+          <button class="btn btn-sm btn-secondary inv-period-btn" data-period="custom">🔍 Personalizado</button>
+        </div>
+
+        <!-- Controles Contextuales de Selección de Mes / Año / Fechas -->
+        <div id="inv-period-controls" style="display:flex;align-items:center;gap:8px">
+          <div id="inv-month-container" style="display:none;align-items:center;gap:6px">
+            <label style="font-size:12px;font-weight:700;color:var(--text-muted)">Mes:</label>
+            <input type="month" id="inv-month-select" class="form-control" style="width:160px;font-size:12.5px;padding:4px 8px" value="${currentMonth}">
+          </div>
+          <div id="inv-year-container" style="display:none;align-items:center;gap:6px">
+            <label style="font-size:12px;font-weight:700;color:var(--text-muted)">Año:</label>
+            <select id="inv-year-select" class="form-select" style="width:110px;font-size:12.5px;padding:4px 8px">
+              <option value="${parseInt(currentYear,10) - 1}">${parseInt(currentYear,10) - 1}</option>
+              <option value="${currentYear}" selected>${currentYear}</option>
+              <option value="${parseInt(currentYear,10) + 1}">${parseInt(currentYear,10) + 1}</option>
+            </select>
+          </div>
+          <div id="inv-custom-dates" style="display:none;align-items:center;gap:6px">
+            <label style="font-size:12px;font-weight:700;color:var(--text-muted)">Desde:</label>
+            <input type="date" class="form-control" id="inv-from" style="width:140px;font-size:12.5px;padding:4px 8px" title="Desde">
+            <label style="font-size:12px;font-weight:700;color:var(--text-muted)">Hasta:</label>
+            <input type="date" class="form-control" id="inv-to" style="width:140px;font-size:12.5px;padding:4px 8px" title="Hasta">
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- Filtros Rápidos por Estado -->
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;align-items:center">
-      <span style="font-weight:700;font-size:13px;color:var(--text-muted)">Filtrar por estado:</span>
+      <span style="font-weight:700;font-size:13px;color:var(--text-muted)">🏷️ Estado:</span>
       <button class="btn btn-sm btn-secondary inv-status-filter active" data-status="">📋 Todos</button>
       <button class="btn btn-sm btn-secondary inv-status-filter" data-status="pendiente">🟡 Pendientes</button>
       <button class="btn btn-sm btn-secondary inv-status-filter" data-status="con_abono">🟠 Con Abono</button>
@@ -50,12 +96,19 @@ window.Modules.invoices = {
       <button class="btn btn-sm btn-secondary inv-status-filter" data-status="anulada">🔴 Anuladas</button>
     </div>
 
-    <!-- Filtros de Búsqueda y Fecha -->
-    <div class="filters-bar mb-16">
-      <div class="search-box"><input type="text" id="inv-search" placeholder="Buscar por # factura o cliente..."></div>
-      <input type="date" class="form-control" id="inv-from" style="width:150px" title="Desde">
-      <input type="date" class="form-control" id="inv-to" style="width:150px" title="Hasta">
-      <button class="btn btn-secondary" id="btn-export-invoices">📤 Exportar CSV</button>
+    <!-- Filtros de Búsqueda y Botones de Exportación (PDF y CSV) -->
+    <div class="filters-bar mb-16" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div class="search-box" style="flex:1;min-width:260px">
+        <input type="text" id="inv-search" placeholder="Buscar por # factura o cliente...">
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-primary" id="btn-export-pdf" style="display:flex;align-items:center;gap:6px;font-weight:700" title="Descargar / Imprimir reporte de facturas en PDF según el filtro activo">
+          <span>📄</span> Descargar Reporte PDF
+        </button>
+        <button class="btn btn-secondary" id="btn-export-invoices" style="display:flex;align-items:center;gap:6px" title="Exportar listado filtrado a CSV">
+          <span>📤</span> Exportar CSV
+        </button>
+      </div>
     </div>
 
     <!-- Tabla Principal -->
@@ -125,18 +178,41 @@ window.Modules.invoices = {
     </div>`;
   },
 
-  _currentStatusFilter: '',
-
   init() {
     this._currentStatusFilter = '';
+    this._currentPeriod = 'all';
     this._renderTable();
 
+    // Eventos de búsqueda y exportación
     document.getElementById('inv-search')?.addEventListener('input', Utils.debounce(() => this._renderTable()));
     document.getElementById('inv-from')?.addEventListener('change', () => this._renderTable());
     document.getElementById('inv-to')?.addEventListener('change', () => this._renderTable());
+    document.getElementById('inv-month-select')?.addEventListener('change', () => this._renderTable());
+    document.getElementById('inv-year-select')?.addEventListener('change', () => this._renderTable());
     document.getElementById('btn-export-invoices')?.addEventListener('click', () => this._export());
+    document.getElementById('btn-export-pdf')?.addEventListener('click', () => this._exportPDF());
 
-    // Filtros rápidos de estado
+    // Eventos de botones de Período
+    document.querySelectorAll('.inv-period-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.inv-period-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this._currentPeriod = btn.dataset.period;
+
+        // Mostrar / ocultar controles secundarios según el período
+        const monthBox = document.getElementById('inv-month-container');
+        const yearBox = document.getElementById('inv-year-container');
+        const customBox = document.getElementById('inv-custom-dates');
+
+        if (monthBox) monthBox.style.display = this._currentPeriod === 'month' ? 'flex' : 'none';
+        if (yearBox) yearBox.style.display = this._currentPeriod === 'year' ? 'flex' : 'none';
+        if (customBox) customBox.style.display = this._currentPeriod === 'custom' ? 'flex' : 'none';
+
+        this._renderTable();
+      });
+    });
+
+    // Eventos de botones de Estado
     document.querySelectorAll('.inv-status-filter').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.inv-status-filter').forEach(b => b.classList.remove('active'));
@@ -147,20 +223,130 @@ window.Modules.invoices = {
     });
   },
 
-  _renderTable() {
+  _getFilteredSales() {
     let sales = DB.getAll('sales');
-    const search = (document.getElementById('inv-search')?.value || '').toLowerCase();
-    const from   = document.getElementById('inv-from')?.value || '';
-    const to     = document.getElementById('inv-to')?.value || '';
-    const status = this._currentStatusFilter;
+    const search = (document.getElementById('inv-search')?.value || '').toLowerCase().trim();
+    const status = this._currentStatusFilter || '';
+    const period = this._currentPeriod || 'all';
 
-    if (search) sales = sales.filter(s =>
-      (s.invoiceNumber || '').toLowerCase().includes(search) ||
-      (s.customerName || '').toLowerCase().includes(search)
-    );
-    if (from) sales = sales.filter(s => s.date >= from);
-    if (to)   sales = sales.filter(s => s.date <= to);
-    if (status) sales = sales.filter(s => s.status === status);
+    // 1. Filtrado por período
+    const today = Utils.today();
+    if (period === 'today') {
+      sales = sales.filter(s => Utils.isToday(s.date || s.datetime));
+    } else if (period === 'week') {
+      const [monStr, sunStr] = Utils.getCurrentWeekRange();
+      sales = sales.filter(s => {
+        const d = Utils.extractDate(s.date || s.datetime);
+        return d >= monStr && d <= sunStr;
+      });
+    } else if (period === 'month') {
+      const selectedMonth = document.getElementById('inv-month-select')?.value || today.slice(0, 7);
+      sales = sales.filter(s => Utils.extractDate(s.date || s.datetime).startsWith(selectedMonth));
+    } else if (period === 'year') {
+      const selectedYear = document.getElementById('inv-year-select')?.value || today.slice(0, 4);
+      sales = sales.filter(s => Utils.extractDate(s.date || s.datetime).startsWith(selectedYear));
+    } else if (period === 'custom') {
+      const from = document.getElementById('inv-from')?.value || '';
+      const to   = document.getElementById('inv-to')?.value || '';
+      if (from) sales = sales.filter(s => Utils.extractDate(s.date || s.datetime) >= from);
+      if (to)   sales = sales.filter(s => Utils.extractDate(s.date || s.datetime) <= to);
+    }
+
+    // 2. Filtrado por estado
+    if (status) {
+      sales = sales.filter(s => s.status === status);
+    }
+
+    // 3. Filtrado por búsqueda
+    if (search) {
+      sales = sales.filter(s =>
+        (s.invoiceNumber || '').toLowerCase().includes(search) ||
+        (s.customerName || '').toLowerCase().includes(search)
+      );
+    }
+
+    return sales;
+  },
+
+  _getPeriodLabel() {
+    const period = this._currentPeriod || 'all';
+    const today = Utils.today();
+    if (period === 'today') {
+      return `Facturas de Hoy (${Utils.formatDate(today)})`;
+    } else if (period === 'week') {
+      const [monStr, sunStr] = Utils.getCurrentWeekRange();
+      return `Facturas de Esta Semana (${Utils.formatDate(monStr)} al ${Utils.formatDate(sunStr)})`;
+    } else if (period === 'month') {
+      const sel = document.getElementById('inv-month-select')?.value || today.slice(0, 7);
+      const [y, m] = sel.split('-');
+      const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+      const mName = monthNames[parseInt(m, 10) - 1] || m;
+      return `Facturas del Mes (${mName} ${y})`;
+    } else if (period === 'year') {
+      const selYear = document.getElementById('inv-year-select')?.value || today.slice(0, 4);
+      return `Facturas del Año ${selYear}`;
+    } else if (period === 'custom') {
+      const from = document.getElementById('inv-from')?.value;
+      const to = document.getElementById('inv-to')?.value;
+      if (from && to) return `Rango: ${Utils.formatDate(from)} al ${Utils.formatDate(to)}`;
+      if (from) return `Desde ${Utils.formatDate(from)}`;
+      if (to) return `Hasta ${Utils.formatDate(to)}`;
+      return 'Rango Personalizado';
+    }
+    return 'Todas las Facturas Registradas';
+  },
+
+  _getStatusLabel() {
+    const map = {
+      '': 'Todos los estados',
+      'pendiente': 'Solo Pendientes',
+      'con_abono': 'Solo Con Abono',
+      'pagada': 'Solo Pagadas',
+      'pagada_no_retirada': 'Solo Pagadas No Retiradas',
+      'retirada': 'Solo Retiradas',
+      'anulada': 'Solo Anuladas'
+    };
+    return map[this._currentStatusFilter] || this._currentStatusFilter;
+  },
+
+  _updateStats(filteredSales) {
+    const totalCount = filteredSales.length;
+    const nonAnnulled = filteredSales.filter(s => s.status !== 'anulada');
+    const totalRevenue = nonAnnulled
+      .filter(s => s.status !== 'pendiente')
+      .reduce((a, s) => a + (s.totalPaid != null ? s.totalPaid : s.total), 0);
+    const pendingCount = filteredSales.filter(s => s.status === 'pendiente' || s.status === 'con_abono').length;
+    const pendingBalance = nonAnnulled
+      .filter(s => s.status === 'pendiente' || s.status === 'con_abono')
+      .reduce((a, s) => a + (s.totalPending != null ? s.totalPending : s.total), 0);
+
+    const countEl = document.getElementById('inv-stat-count');
+    const revEl = document.getElementById('inv-stat-revenue');
+    const pendEl = document.getElementById('inv-stat-pending');
+    const balEl = document.getElementById('inv-stat-balance');
+    const badgeEl = document.getElementById('inv-period-badge');
+
+    if (countEl) countEl.textContent = String(totalCount);
+    if (revEl) revEl.textContent = Utils.formatCurrency(totalRevenue);
+    if (pendEl) pendEl.textContent = String(pendingCount);
+    if (balEl) balEl.textContent = Utils.formatCurrency(pendingBalance);
+
+    if (badgeEl) {
+      const badgeMap = {
+        all: 'Todas',
+        today: 'Hoy',
+        week: 'Semana',
+        month: 'Mes',
+        year: 'Año',
+        custom: 'Personalizado'
+      };
+      badgeEl.textContent = badgeMap[this._currentPeriod] || 'Filtrado';
+    }
+  },
+
+  _renderTable() {
+    const sales = this._getFilteredSales();
+    this._updateStats(sales);
 
     const tbody = document.getElementById('invoices-tbody');
     if (!tbody) return;
@@ -433,7 +619,7 @@ window.Modules.invoices = {
   },
 
   _export() {
-    const sales = DB.getAll('sales');
+    const sales = this._getFilteredSales();
     const rows = [['Factura','Fecha','Cliente','Total','Abonado','Saldo','Pago','Estado']];
     sales.forEach(s => rows.push([
       s.invoiceNumber,
@@ -445,7 +631,25 @@ window.Modules.invoices = {
       s.paymentMethod,
       s.status
     ]));
-    Utils.downloadCSV(rows, 'facturas_ferreteria_el_bule.csv');
-    Utils.showToast('Facturas exportadas a CSV', 'success');
+    const periodLabel = (this._currentPeriod || 'todas').toLowerCase();
+    Utils.downloadCSV(rows, `facturas_${periodLabel}_ferreteria_el_bule.csv`);
+    Utils.showToast(`Facturas exportadas a CSV (${sales.length} registros)`, 'success');
+  },
+
+  _exportPDF() {
+    const sales = this._getFilteredSales();
+    if (!sales || sales.length === 0) {
+      Utils.showToast('No hay facturas para el período y filtros seleccionados', 'warning');
+      return;
+    }
+
+    const periodLabel = this._getPeriodLabel();
+    const statusLabel = this._getStatusLabel();
+
+    if (window.PrintModule && window.PrintModule.printInvoicesReport) {
+      window.PrintModule.printInvoicesReport({ sales, periodLabel, statusLabel });
+    } else {
+      Utils.showToast('Módulo de impresión PDF no disponible', 'error');
+    }
   }
 };
