@@ -156,103 +156,106 @@ window.Modules.cash = {
 
 
   _del(id) {
-    const movement = DB.findById('cash_movements', id) || DB.getAll('cash_movements').find(item => item.id === id);
+    // Buscar el movimiento de caja (en índice y en array completo por seguridad)
+    const movement = DB.findById('cash_movements', id)
+      || DB.getAll('cash_movements').find(m => m.id === id);
     if (!movement) return;
 
     const ref = movement.reference || '';
-    const concept = (movement.concept || '').toLowerCase();
 
-    // Determinar el tipo de movimiento por el prefijo del ID de referencia o por el concepto
-    const isSaleRef    = ref.startsWith('sale_');
-    const isPurchRef   = ref.startsWith('purch_');
-    const isExpenseRef = !!movement.expenseId || ref.startsWith('exp_');
+    // ─── Detectar qué está vinculado buscando DIRECTAMENTE en cada colección ───
+    // (No dependemos del prefijo del ID — funciona con datos viejos y nuevos)
+    const linkedSale     = ref ? (DB.findById('sales', ref)     || null) : null;
+    const linkedPurchase = ref ? (DB.findById('purchases', ref)  || null) : null;
+    const linkedExpense  = movement.expenseId
+      ? (DB.findById('expenses', movement.expenseId) || null)
+      : (ref ? (DB.findById('expenses', ref) || null) : null);
 
-    // Construir descripción detallada para el confirm
-    let confirmMsg = `¿Eliminar el movimiento "${movement.concept}"?\n\n`;
-    if (isSaleRef)    confirmMsg += '⚠️ Esto ANULARÁ la venta asociada y devolverá el stock al inventario.\n';
-    if (isPurchRef)   confirmMsg += '⚠️ Esto ELIMINARÁ la compra asociada y restará el stock que ingresó.\n';
-    if (isExpenseRef) confirmMsg += '⚠️ Esto también eliminará el gasto asociado.\n';
-    confirmMsg += '\nEl registro desaparecerá por completo de reportes, historial y Dashboard.';
+    // ─── Construir mensaje de confirmación según lo que se va a eliminar ───
+    let confirmMsg = `¿Eliminar este movimiento?\n\n📋 "${movement.concept}"\n💵 ${Utils.formatCurrency(movement.amount)}\n\n`;
+    if (linkedSale)     confirmMsg += `⚠️ Se ELIMINARÁ la venta ${linkedSale.invoiceNumber} y se DEVOLVERÁN ${(linkedSale.items||[]).reduce((a,it)=>a+it.qty,0)} unidades al inventario.\n`;
+    if (linkedPurchase) confirmMsg += `⚠️ Se ELIMINARÁ la compra a "${linkedPurchase.supplierName}" y se RESTARÁN las unidades compradas del inventario.\n`;
+    if (linkedExpense)  confirmMsg += `⚠️ Se ELIMINARÁ el gasto "${linkedExpense.description || linkedExpense.concept || ''}" asociado.\n`;
+    if (!linkedSale && !linkedPurchase && !linkedExpense) confirmMsg += 'ℹ️ Movimiento manual — solo se elimina de Caja.\n';
+    confirmMsg += '\n❌ Esta acción no se puede deshacer.';
 
     if (!Utils.confirm(confirmMsg)) return;
 
-    // 1. Eliminar siempre el movimiento de caja
+    // ─── PASO 1: Siempre eliminar el movimiento de caja ───
     DB.delete('cash_movements', id);
 
-    // 2. Si referencia a una VENTA → anularla y devolver stock
-    if (isSaleRef) {
-      const sale = DB.findById('sales', ref);
-      if (sale && sale.status !== 'anulada') {
-        // Restaurar stock de cada ítem
-        (sale.items || []).forEach(it => {
+    // ─── PASO 2: Eliminar VENTA vinculada + restaurar stock ───
+    if (linkedSale) {
+      // Restaurar stock de todos los ítems si el stock fue descontado
+      if (linkedSale.stockDeducted !== false) {
+        (linkedSale.items || []).forEach(it => {
           const p = DB.findById('products', it.productId);
-          if (p && sale.stockDeducted !== false) {
+          if (p) {
             DB.restoreStock(it.productId, it.qty);
             DB.logMovement({
               productId: it.productId,
               productName: it.name,
               qty: it.qty,
-              type: 'Anulación desde Caja',
-              reason: `Venta ${sale.invoiceNumber} eliminada desde Caja (Stock restaurado)`,
-              value: sale.totalPaid || 0
+              type: 'Eliminación desde Caja',
+              reason: `Venta ${linkedSale.invoiceNumber} borrada desde Caja (Stock restaurado)`,
+              value: linkedSale.totalPaid || 0
             });
           }
         });
-        // Borrar por completo (skipStockRestore=true porque ya restauramos arriba)
-        DB.delete('sales', ref, true);
-        Utils.showToast(`✅ Venta ${sale.invoiceNumber} eliminada por completo. Stock restaurado.`, 'warning');
-      } else if (sale && sale.status === 'anulada') {
-        // Si ya estaba anulada solo borramos el registro
-        DB.delete('sales', ref);
-        Utils.showToast('Movimiento y venta eliminados de Caja.', 'success');
-      } else {
-        Utils.showToast('Movimiento eliminado de Caja.', 'success');
       }
+      // Borrar TODOS los movimientos de caja vinculados a esta venta (abonos, etc.)
+      DB.getAll('cash_movements')
+        .filter(m => m.reference === ref && m.id !== id)
+        .forEach(m => DB.delete('cash_movements', m.id));
+      // Borrar la venta (skipStockRestore=true porque ya restauramos arriba)
+      DB.delete('sales', ref, true);
+      Utils.showToast(`✅ Venta ${linkedSale.invoiceNumber} eliminada por completo. Stock restaurado al inventario.`, 'warning');
       const content = document.getElementById('content');
       if (content) { content.innerHTML = this.render(); this.init(); }
       return;
     }
 
-    // 3. Si referencia a una COMPRA → revertir stock y borrar compra
-    if (isPurchRef) {
-      const purchase = DB.findById('purchases', ref);
-      if (purchase) {
-        (purchase.items || []).forEach(it => {
-          const p = DB.findById('products', it.productId);
-          if (p && it.qty > 0) {
-            DB.restoreStockReverse(it.productId, it.qty, it.unitCost);
-            DB.logMovement({
-              productId: it.productId,
-              productName: it.name,
-              qty: -it.qty,
-              type: 'Eliminación Compra desde Caja',
-              reason: `Compra eliminada — ${purchase.supplierName} (Stock revertido)`,
-              value: it.subtotal || 0
-            });
-          }
-        });
-        DB.delete('purchases', ref);
-        Utils.showToast('✅ Compra eliminada por completo. Stock revertido.', 'warning');
-      } else {
-        Utils.showToast('Movimiento de caja eliminado.', 'success');
-      }
+    // ─── PASO 3: Eliminar COMPRA vinculada + revertir stock ───
+    if (linkedPurchase) {
+      let totalUnitsReverted = 0;
+      (linkedPurchase.items || []).forEach(it => {
+        const p = DB.findById('products', it.productId);
+        if (p && it.qty > 0) {
+          DB.restoreStockReverse(it.productId, it.qty, it.unitCost);
+          DB.logMovement({
+            productId: it.productId,
+            productName: it.name,
+            qty: -it.qty,
+            type: 'Eliminación Compra desde Caja',
+            reason: `Compra a "${linkedPurchase.supplierName}" borrada desde Caja (Stock revertido)`,
+            value: it.subtotal || 0
+          });
+          totalUnitsReverted += it.qty;
+        }
+      });
+      // Borrar otros movimientos de caja vinculados a esta compra
+      DB.getAll('cash_movements')
+        .filter(m => m.reference === ref && m.id !== id)
+        .forEach(m => DB.delete('cash_movements', m.id));
+      DB.delete('purchases', ref);
+      Utils.showToast(`✅ Compra eliminada. Se revirtieron ${totalUnitsReverted} unidades del inventario.`, 'warning');
       const content = document.getElementById('content');
       if (content) { content.innerHTML = this.render(); this.init(); }
       return;
     }
 
-    // 4. Si referencia a un GASTO → borrar el gasto también
-    if (isExpenseRef) {
-      if (movement.expenseId) DB.delete('expenses', movement.expenseId);
-      else if (ref) DB.delete('expenses', ref);
-      Utils.showToast('Gasto y movimiento de caja eliminados.', 'success');
+    // ─── PASO 4: Eliminar GASTO vinculado ───
+    if (linkedExpense) {
+      const expId = movement.expenseId || ref;
+      DB.delete('expenses', expId);
+      Utils.showToast('✅ Gasto y movimiento de caja eliminados.', 'success');
       const content = document.getElementById('content');
       if (content) { content.innerHTML = this.render(); this.init(); }
       return;
     }
 
-    // 5. Movimiento manual (sin referencia) → solo borrar el movimiento de caja
-    Utils.showToast('Movimiento manual eliminado de Caja.', 'success');
+    // ─── PASO 5: Movimiento manual — ya fue borrado en el paso 1 ───
+    Utils.showToast('✅ Movimiento eliminado de Caja.', 'success');
     const content = document.getElementById('content');
     if (content) { content.innerHTML = this.render(); this.init(); }
   },
