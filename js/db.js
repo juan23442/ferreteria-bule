@@ -250,8 +250,8 @@ const DB = (() => {
       return null;
     },
 
-    delete(col, id) {
-      if (col === 'sales') {
+    delete(col, id, skipStockRestore = false) {
+      if (col === 'sales' && !skipStockRestore) {
         const sale = this.findById('sales', id);
         if (sale && sale.status !== 'anulada' && sale.stockDeducted !== false) {
           (sale.items || []).forEach(it => {

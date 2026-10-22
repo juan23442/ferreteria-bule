@@ -120,7 +120,7 @@ window.Modules.cash = {
     const from = document.getElementById('cash-from')?.value || '';
     const to = document.getElementById('cash-to')?.value || '';
     if (from) movs = movs.filter(m => m.date >= from);
-    if (to) movs = movs.filter(m => m.date <= to);
+    if (to)   movs = movs.filter(m => m.date <= to);
     const tbody = document.getElementById('cash-tbody');
     if (!tbody) return;
 
@@ -129,29 +129,94 @@ window.Modules.cash = {
       return;
     }
 
-    tbody.innerHTML = movs.map(m => `
+    tbody.innerHTML = movs.map(m => {
+      const ref = m.reference || '';
+      // Etiqueta de origen
+      let sourceTag = '';
+      if (ref.startsWith('sale_'))  sourceTag = '<span class="badge badge-success"  style="font-size:10px">🧾 Venta</span>';
+      else if (ref.startsWith('purch_')) sourceTag = '<span class="badge badge-info"    style="font-size:10px">📦 Compra</span>';
+      else if (m.expenseId || ref.startsWith('exp_')) sourceTag = '<span class="badge badge-warning" style="font-size:10px">💸 Gasto</span>';
+      else sourceTag = '<span class="badge badge-gray"    style="font-size:10px">✍️ Manual</span>';
+
+      return `
       <tr>
-        <td>${Utils.formatDatetime(m.datetime)}</td>
-        <td>${m.type === 'ingreso' ? '<span class="badge badge-success">📥 Ingreso</span>' : '<span class="badge badge-danger">📤 Egreso</span>'}</td>
+        <td><small>${Utils.formatDatetime(m.datetime)}</small></td>
+        <td>
+          ${m.type === 'ingreso'
+            ? '<span class="badge badge-success">📥 Ingreso</span>'
+            : '<span class="badge badge-danger">📤 Egreso</span>'}
+          <br><small>${sourceTag}</small>
+        </td>
         <td><strong>${Utils.escHtml(m.concept)}</strong></td>
         <td class="${m.type==='ingreso'?'text-success':'text-danger'} font-bold">${m.type==='ingreso'?'+':'-'}${Utils.formatCurrency(m.amount)}</td>
-        <td><button class="btn btn-sm btn-danger" title="Eliminar movimiento" aria-label="Eliminar movimiento ${Utils.escHtml(m.concept)}" onclick="Modules.cash._del('${m.id}')">🗑️</button></td>
-      </tr>
-    `).join('');
+        <td><button class="btn btn-sm btn-danger" title="Eliminar — borra registro, historial y revierte stock si aplica" onclick="Modules.cash._del('${m.id}')">🗑️</button></td>
+      </tr>`;
+    }).join('');
   },
+
 
   _del(id) {
     const movement = DB.findById('cash_movements', id) || DB.getAll('cash_movements').find(item => item.id === id);
     if (!movement) return;
-    if (!Utils.confirm(`¿Eliminar el movimiento "${movement.concept}" de Caja?`)) return;
 
+    const ref = movement.reference || '';
+    const concept = (movement.concept || '').toLowerCase();
+
+    // Determinar el tipo de movimiento por el prefijo del ID de referencia o por el concepto
+    const isSaleRef    = ref.startsWith('sale_');
+    const isPurchRef   = ref.startsWith('purch_');
+    const isExpenseRef = !!movement.expenseId || ref.startsWith('exp_');
+
+    // Construir descripción detallada para el confirm
+    let confirmMsg = `¿Eliminar el movimiento "${movement.concept}"?\n\n`;
+    if (isSaleRef)    confirmMsg += '⚠️ Esto ANULARÁ la venta asociada y devolverá el stock al inventario.\n';
+    if (isPurchRef)   confirmMsg += '⚠️ Esto ELIMINARÁ la compra asociada y restará el stock que ingresó.\n';
+    if (isExpenseRef) confirmMsg += '⚠️ Esto también eliminará el gasto asociado.\n';
+    confirmMsg += '\nEl registro desaparecerá por completo de reportes, historial y Dashboard.';
+
+    if (!Utils.confirm(confirmMsg)) return;
+
+    // 1. Eliminar siempre el movimiento de caja
     DB.delete('cash_movements', id);
 
-    // Si el movimiento tiene referencia a una compra (egreso de compra), también eliminar la compra y revertir el stock
-    if (movement.reference && (movement.concept || '').toLowerCase().includes('compra')) {
-      const purchase = DB.findById('purchases', movement.reference);
+    // 2. Si referencia a una VENTA → anularla y devolver stock
+    if (isSaleRef) {
+      const sale = DB.findById('sales', ref);
+      if (sale && sale.status !== 'anulada') {
+        // Restaurar stock de cada ítem
+        (sale.items || []).forEach(it => {
+          const p = DB.findById('products', it.productId);
+          if (p && sale.stockDeducted !== false) {
+            DB.restoreStock(it.productId, it.qty);
+            DB.logMovement({
+              productId: it.productId,
+              productName: it.name,
+              qty: it.qty,
+              type: 'Anulación desde Caja',
+              reason: `Venta ${sale.invoiceNumber} eliminada desde Caja (Stock restaurado)`,
+              value: sale.totalPaid || 0
+            });
+          }
+        });
+        // Borrar por completo (skipStockRestore=true porque ya restauramos arriba)
+        DB.delete('sales', ref, true);
+        Utils.showToast(`✅ Venta ${sale.invoiceNumber} eliminada por completo. Stock restaurado.`, 'warning');
+      } else if (sale && sale.status === 'anulada') {
+        // Si ya estaba anulada solo borramos el registro
+        DB.delete('sales', ref);
+        Utils.showToast('Movimiento y venta eliminados de Caja.', 'success');
+      } else {
+        Utils.showToast('Movimiento eliminado de Caja.', 'success');
+      }
+      const content = document.getElementById('content');
+      if (content) { content.innerHTML = this.render(); this.init(); }
+      return;
+    }
+
+    // 3. Si referencia a una COMPRA → revertir stock y borrar compra
+    if (isPurchRef) {
+      const purchase = DB.findById('purchases', ref);
       if (purchase) {
-        // Revertir el stock que agregó esta compra
         (purchase.items || []).forEach(it => {
           const p = DB.findById('products', it.productId);
           if (p && it.qty > 0) {
@@ -160,22 +225,34 @@ window.Modules.cash = {
               productId: it.productId,
               productName: it.name,
               qty: -it.qty,
-              type: 'Eliminación Compra',
+              type: 'Eliminación Compra desde Caja',
               reason: `Compra eliminada — ${purchase.supplierName} (Stock revertido)`,
               value: it.subtotal || 0
             });
           }
         });
-        DB.delete('purchases', movement.reference);
-        Utils.showToast('Compra y movimiento de caja eliminados. Stock revertido.', 'warning');
+        DB.delete('purchases', ref);
+        Utils.showToast('✅ Compra eliminada por completo. Stock revertido.', 'warning');
       } else {
-        Utils.showToast('Movimiento eliminado de Caja', 'success');
+        Utils.showToast('Movimiento de caja eliminado.', 'success');
       }
-    } else {
-      if (movement.expenseId) DB.delete('expenses', movement.expenseId);
-      Utils.showToast('Movimiento eliminado de Caja', 'success');
+      const content = document.getElementById('content');
+      if (content) { content.innerHTML = this.render(); this.init(); }
+      return;
     }
 
+    // 4. Si referencia a un GASTO → borrar el gasto también
+    if (isExpenseRef) {
+      if (movement.expenseId) DB.delete('expenses', movement.expenseId);
+      else if (ref) DB.delete('expenses', ref);
+      Utils.showToast('Gasto y movimiento de caja eliminados.', 'success');
+      const content = document.getElementById('content');
+      if (content) { content.innerHTML = this.render(); this.init(); }
+      return;
+    }
+
+    // 5. Movimiento manual (sin referencia) → solo borrar el movimiento de caja
+    Utils.showToast('Movimiento manual eliminado de Caja.', 'success');
     const content = document.getElementById('content');
     if (content) { content.innerHTML = this.render(); this.init(); }
   },
