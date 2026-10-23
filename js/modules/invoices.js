@@ -232,7 +232,11 @@ window.Modules.invoices = {
     // 1. Filtrado por período
     const today = Utils.today();
     if (period === 'today') {
-      sales = sales.filter(s => Utils.isToday(s.date || s.datetime));
+      sales = sales.filter(s => {
+        const settledDate = Utils.getSaleSettledDate(s);
+        if (settledDate) return settledDate === today;
+        return Utils.isToday(s.date || s.datetime);
+      });
     } else if (period === 'week') {
       const [monStr, sunStr] = Utils.getCurrentWeekRange();
       sales = sales.filter(s => {

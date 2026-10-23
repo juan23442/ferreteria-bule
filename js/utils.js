@@ -93,6 +93,58 @@ const Utils = {
     return this.extractDate(dateOrIso) === this.today();
   },
 
+  // Obtiene la fecha exacta (YYYY-MM-DD) en la que una venta fue totalmente saldada ($0 saldo pendiente).
+  // Si la venta no está saldada (tiene saldo pendiente, está fiada o anulada), retorna null.
+  getSaleSettledDate(sale) {
+    if (!sale) return null;
+    if (sale.status === 'anulada') return null;
+
+    // Si tiene saldo pendiente (> $0) o está en estado pendiente/con_abono, NO está saldada
+    const hasPendingBalance = (sale.totalPending != null && sale.totalPending > 0.01);
+    const isPendingStatus = sale.status === 'pendiente' || sale.status === 'con_abono';
+    if (hasPendingBalance || isPendingStatus) {
+      return null;
+    }
+
+    // Si está saldada:
+    // 1. Prioridad: paidAt (establecido en la fecha/hora exacta en la que se saldó la totalidad)
+    if (sale.paidAt) {
+      return this.extractDate(sale.paidAt);
+    }
+
+    // 2. Si no tiene paidAt pero tiene pagos en su historial, la fecha del último abono/pago
+    if (Array.isArray(sale.payments) && sale.payments.length > 0) {
+      const lastPay = sale.payments[sale.payments.length - 1];
+      if (lastPay && (lastPay.datetime || lastPay.date)) {
+        return this.extractDate(lastPay.datetime || lastPay.date);
+      }
+    }
+
+    // 3. Fallback para ventas históricas al contado sin campo paidAt explícito
+    return this.extractDate(sale.datetime || sale.date);
+  },
+
+  // Valida si una venta fue saldada en su totalidad en el día de hoy
+  isSaleSettledToday(sale) {
+    const settledDate = this.getSaleSettledDate(sale);
+    if (!settledDate) return false;
+    return this.isToday(settledDate);
+  },
+
+  // Valida si una venta fue saldada en una fecha específica YYYY-MM-DD
+  isSaleSettledOn(sale, dateStr) {
+    const settledDate = this.getSaleSettledDate(sale);
+    if (!settledDate) return false;
+    return settledDate === dateStr;
+  },
+
+  // Valida si una venta fue saldada dentro de un rango de fechas
+  isSaleSettledInRange(sale, from, to) {
+    const settledDate = this.getSaleSettledDate(sale);
+    if (!settledDate) return false;
+    return this.dateInRange(settledDate, from, to);
+  },
+
   generateId(prefix = 'id') {
     return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`;
   },

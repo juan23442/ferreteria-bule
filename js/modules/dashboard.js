@@ -19,14 +19,20 @@ window.Modules.dashboard = {
     const monthStr = today.slice(0, 7);
     const yearStr = today.slice(0, 4);
 
-    // Sales Metrics (Filtrado estricto por fecha local actual)
-    const todaySales = sales.filter(s => Utils.isToday(s.date || s.datetime));
+    // Sales Metrics (Filtrado estricto por fecha en que la venta quedó 100% saldada)
+    const todaySales = sales.filter(s => Utils.isSaleSettledToday(s));
     const weekSales  = sales.filter(s => {
-      const d = Utils.extractDate(s.date || s.datetime);
-      return d >= monStr && d <= sunStr;
+      const d = Utils.getSaleSettledDate(s);
+      return d && d >= monStr && d <= sunStr;
     });
-    const monthSales = sales.filter(s => Utils.extractDate(s.date || s.datetime).startsWith(monthStr));
-    const yearSales  = sales.filter(s => Utils.extractDate(s.date || s.datetime).startsWith(yearStr));
+    const monthSales = sales.filter(s => {
+      const d = Utils.getSaleSettledDate(s);
+      return d && d.startsWith(monthStr);
+    });
+    const yearSales  = sales.filter(s => {
+      const d = Utils.getSaleSettledDate(s);
+      return d && d.startsWith(yearStr);
+    });
 
     const todayTotal = Utils.sum(todaySales, 'total');
     const weekTotal  = Utils.sum(weekSales, 'total');
@@ -240,21 +246,27 @@ window.Modules.dashboard = {
 
     let filtered = sales;
     if (this._salesPeriod === 'today') {
-      filtered = sales.filter(s => Utils.isToday(s.date || s.datetime));
+      filtered = sales.filter(s => Utils.isSaleSettledToday(s));
     } else if (this._salesPeriod === 'week') {
       const [monStr, sunStr] = Utils.getCurrentWeekRange();
       filtered = sales.filter(s => {
-        const dt = Utils.extractDate(s.date || s.datetime);
-        return dt >= monStr && dt <= sunStr;
+        const dt = Utils.getSaleSettledDate(s);
+        return dt && dt >= monStr && dt <= sunStr;
       });
     } else if (this._salesPeriod === 'month') {
-      filtered = sales.filter(s => Utils.extractDate(s.date || s.datetime).startsWith(today.slice(0,7)));
+      filtered = sales.filter(s => {
+        const dt = Utils.getSaleSettledDate(s);
+        return dt && dt.startsWith(today.slice(0, 7));
+      });
     } else if (this._salesPeriod === 'year') {
-      filtered = sales.filter(s => Utils.extractDate(s.date || s.datetime).startsWith(today.slice(0,4)));
+      filtered = sales.filter(s => {
+        const dt = Utils.getSaleSettledDate(s);
+        return dt && dt.startsWith(today.slice(0, 4));
+      });
     }
 
     if (filtered.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7">${Utils.emptyState('No hay ventas en este período', '🧾')}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7">${Utils.emptyState('No hay ventas saldadas en este período', '🧾')}</td></tr>`;
       return;
     }
 
@@ -263,7 +275,7 @@ window.Modules.dashboard = {
       return `
       <tr>
         <td><strong>${Utils.escHtml(s.invoiceNumber)}</strong></td>
-        <td class="muted"><small>${Utils.formatDatetime(s.datetime)}</small></td>
+        <td class="muted"><small>${Utils.formatDatetime(s.paidAt || s.datetime)}</small></td>
         <td>${Utils.escHtml(s.customerName)}</td>
         <td style="text-align:center">${itemsCount}</td>
         <td class="text-success font-bold">${Utils.formatCurrency(s.total)}</td>
@@ -324,8 +336,8 @@ window.Modules.dashboard = {
     if (filter === 'semana') {
       for (let i = 6; i >= 0; i--) {
         const d = new Date(); d.setDate(d.getDate() - i);
-        const dStr = d.toISOString().split('T')[0];
-        const daySales = sales.filter(s => s.date === dStr);
+        const dStr = Utils.extractDate(d.toISOString());
+        const daySales = sales.filter(s => Utils.isSaleSettledOn(s, dStr));
         const label = d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
         points.push({ label, total: Utils.sum(daySales, 'total') });
       }
@@ -334,7 +346,7 @@ window.Modules.dashboard = {
       for (let day = 1; day <= daysInMonth; day += 3) {
         const mStr = now.toISOString().slice(0, 7);
         const dStr = `${mStr}-${String(day).padStart(2, '0')}`;
-        const daySales = sales.filter(s => s.date === dStr);
+        const daySales = sales.filter(s => Utils.isSaleSettledOn(s, dStr));
         const label = `${String(day).padStart(2, '0')} ${now.toLocaleDateString('es-CO', { month: 'short' })}`;
         points.push({ label, total: Utils.sum(daySales, 'total') });
       }
@@ -416,7 +428,10 @@ window.Modules.dashboard = {
 
     const sales = DB.getAll('sales').filter(s => s.status !== 'anulada');
     const monthStr = Utils.today().slice(0, 7);
-    const monthSales = sales.filter(s => s.date && s.date.startsWith(monthStr));
+    const monthSales = sales.filter(s => {
+      const d = Utils.getSaleSettledDate(s);
+      return d && d.startsWith(monthStr);
+    });
 
     const catTotals = {};
     monthSales.forEach(s => (s.items||[]).forEach(it => {

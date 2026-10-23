@@ -66,16 +66,19 @@ window.Modules.reports = {
   _generateReport() {
     const [from, to] = this._getDateRange();
 
-    const sales = DB.getAll('sales').filter(s => s.status !== 'anulada' && Utils.dateInRange(Utils.extractDate(s.date || s.datetime), from, to));
+    // Solo se contabilizan ventas 100% saldadas en la fecha exacta en la que se completó el pago
+    const sales = DB.getAll('sales').filter(s => {
+      const settledDate = Utils.getSaleSettledDate(s);
+      return settledDate && Utils.dateInRange(settledDate, from, to);
+    });
     const purchases = DB.getAll('purchases').filter(p => Utils.dateInRange(Utils.extractDate(p.date || p.datetime), from, to));
     const expenses = DB.getAll('expenses').filter(e => Utils.dateInRange(Utils.extractDate(e.date || e.datetime), from, to));
     const cashMovs = DB.getAll('cash_movements').filter(m => Utils.dateInRange(Utils.extractDate(m.date || m.datetime), from, to));
 
-    const totalRevenue = sales.reduce((a, s) => a + (s.totalPaid != null ? s.totalPaid : s.total), 0);
-    const totalCost = sales.reduce((a,s) => {
-      const saleCost = (s.items||[]).reduce((b,it) => b + ((it.qty||1) * (it.costPrice||0)), 0);
-      const paidRatio = s.total > 0 ? Math.min(1, (s.totalPaid != null ? s.totalPaid : s.total) / s.total) : 0;
-      return a + saleCost * paidRatio;
+    const totalRevenue = Utils.sum(sales, 'total');
+    const totalCost = sales.reduce((a, s) => {
+      const saleCost = (s.items || []).reduce((b, it) => b + ((it.qty || 1) * (it.costPrice || 0)), 0);
+      return a + saleCost;
     }, 0);
     const grossProfit = Math.max(0, totalRevenue - totalCost);
     const totalExpenses = Utils.sum(expenses, 'amount');
@@ -89,9 +92,8 @@ window.Modules.reports = {
     const prodMap = {};
     sales.forEach(s => (s.items||[]).forEach(it => {
       if (!prodMap[it.name]) prodMap[it.name] = { name: it.name, qty: 0, revenue: 0 };
-      const paidRatio = s.total > 0 ? Math.min(1, (s.totalPaid != null ? s.totalPaid : s.total) / s.total) : 0;
-      prodMap[it.name].qty += (it.qty || 1) * paidRatio;
-      prodMap[it.name].revenue += (it.subtotal || 0) * paidRatio;
+      prodMap[it.name].qty += (it.qty || 1);
+      prodMap[it.name].revenue += (it.subtotal || 0);
     }));
 
     const topProducts = Object.values(prodMap).sort((a,b) => b.revenue - a.revenue).slice(0, 10);

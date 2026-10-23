@@ -193,20 +193,29 @@ window.Modules.sales = {
 
     switch (this._periodFilter) {
       case 'today':
-        return sales.filter(s => Utils.isToday(s.date || s.datetime));
+        return sales.filter(s => Utils.isSaleSettledToday(s));
       case 'week':
         return sales.filter(s => {
-          const d = Utils.extractDate(s.date || s.datetime);
-          return d >= monStr && d <= sunStr;
+          const d = Utils.getSaleSettledDate(s);
+          return d && d >= monStr && d <= sunStr;
         });
       case 'month':
-        return sales.filter(s => Utils.extractDate(s.date || s.datetime).startsWith(today.slice(0, 7)));
+        return sales.filter(s => {
+          const d = Utils.getSaleSettledDate(s);
+          return d && d.startsWith(today.slice(0, 7));
+        });
       case 'year':
-        return sales.filter(s => Utils.extractDate(s.date || s.datetime).startsWith(today.slice(0, 4)));
+        return sales.filter(s => {
+          const d = Utils.getSaleSettledDate(s);
+          return d && d.startsWith(today.slice(0, 4));
+        });
       case 'custom':
-        return sales.filter(s => Utils.dateInRange(Utils.extractDate(s.date || s.datetime), this._fromDate, this._toDate));
+        return sales.filter(s => {
+          const d = Utils.getSaleSettledDate(s);
+          return d && Utils.dateInRange(d, this._fromDate, this._toDate);
+        });
       default:
-        return sales;
+        return sales.filter(s => Utils.getSaleSettledDate(s) !== null);
     }
   },
 
@@ -483,7 +492,9 @@ window.Modules.sales = {
         realProfit,
         paymentMethod,
         notes,
-        status: 'editada',
+        totalPending: (oldSale.totalPending != null && oldSale.totalPending > 0.01) ? Math.max(0, total - (oldSale.totalPaid || 0)) : 0,
+        paidAt: (oldSale.totalPending != null && oldSale.totalPending > 0.01) ? null : (oldSale.paidAt || Utils.nowISO()),
+        status: (oldSale.totalPending != null && oldSale.totalPending > 0.01) ? (oldSale.status || 'pendiente') : 'editada',
         editedAt: Utils.nowISO()
       };
 
@@ -626,7 +637,7 @@ window.Modules.sales = {
       return `
       <tr>
         <td><strong>${Utils.escHtml(s.invoiceNumber)}</strong></td>
-        <td>${Utils.formatDatetime(s.datetime)}</td>
+        <td>${Utils.formatDatetime(s.paidAt || s.datetime)}</td>
         <td><strong>${Utils.escHtml(s.customerName)}</strong></td>
         <td>${itemsCount} und</td>
         <td class="text-danger font-bold">${discount > 0 ? '-' + Utils.formatCurrency(discount) : '-'}</td>
@@ -747,6 +758,7 @@ window.Modules.sales = {
       payments: [],
       totalPaid: 0,
       totalPending: total,
+      paidAt: null,
       stockDeducted: true,
       deliveryStatus: 'no_retirado',
       notes
