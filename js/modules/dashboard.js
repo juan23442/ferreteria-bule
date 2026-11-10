@@ -55,7 +55,28 @@ window.Modules.dashboard = {
 
     const lowStockList = products.filter(p => p.stock <= (p.minStock || 5));
 
+    const pendingClosureMonth = DB.getPendingClosedMonth();
+    let closureBanner = '';
+    if (pendingClosureMonth) {
+      closureBanner = `
+      <div class="card mb-24" style="background:linear-gradient(135deg, rgba(37,99,235,0.08), rgba(245,158,11,0.08));border:1.5px solid #3b82f6;border-radius:10px;padding:12px 18px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="font-size:24px">🔒</span>
+            <div>
+              <div style="font-weight:800;font-size:13.5px;color:var(--text)">Cierre Mensual Pendiente: ${Utils.getMonthLabel(pendingClosureMonth)}</div>
+              <div style="font-size:12px;color:var(--text-muted)">El período anterior ha finalizado. Puedes consolidar el reporte oficial en PDF y optimizar la base de datos de Supabase.</div>
+            </div>
+          </div>
+          <a href="#reports" class="btn btn-primary btn-sm" onclick="setTimeout(()=>{document.querySelector('#report-tabs [data-period=\\'closures\\']')?.click()},150)">
+            ⚡ Realizar Cierre y Descargar PDF
+          </a>
+        </div>
+      </div>`;
+    }
+
     return `
+    ${closureBanner}
     <!-- Fila 1: Tarjetas Principales de Ventas (4 tarjetas) -->
     <div class="grid-4 mb-24">
       <div class="stat-card">

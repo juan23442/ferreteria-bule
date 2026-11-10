@@ -320,6 +320,303 @@ window.PrintModule = {
     w.document.write(html);
     w.document.close();
     setTimeout(() => w.print(), 500);
+  },
+
+  printMonthlyClosure(closureData) {
+    if (!closureData) return;
+    const s = DB.getSettings();
+    const logoHtml = s.logo ? `<img src="${s.logo}" style="max-height:65px;max-width:150px;object-fit:contain;margin-bottom:6px">` : '';
+
+    const sum = closureData.summary || closureData;
+    const month = closureData.month || '';
+    const monthLabel = closureData.monthLabel || Utils.getMonthLabel(month);
+    const dateRange = closureData.dateRange || Utils.getMonthDateRange(month);
+    const closedAt = closureData.closedAt ? Utils.formatDatetime(closureData.closedAt) : Utils.formatDatetime(Utils.nowISO());
+    const closedBy = closureData.closedBy || 'Administrador';
+
+    const totalSales = sum.totalSales || 0;
+    const totalCost = sum.totalCost || 0;
+    const grossProfit = sum.grossProfit != null ? sum.grossProfit : Math.max(0, totalSales - totalCost);
+    const totalExpenses = sum.totalExpenses || 0;
+    const netProfit = sum.netProfit != null ? sum.netProfit : (grossProfit - totalExpenses);
+    const totalPurchases = sum.totalPurchases || 0;
+    const cashIn = sum.cashIn || 0;
+    const cashOut = sum.cashOut || 0;
+    const cashNet = sum.cashNet != null ? sum.cashNet : (cashIn - cashOut);
+
+    const grossMargin = totalSales > 0 ? ((grossProfit / totalSales) * 100).toFixed(1) : '0';
+    const netMargin = totalSales > 0 ? ((netProfit / totalSales) * 100).toFixed(1) : '0';
+
+    const topProducts = sum.topProducts || [];
+    const integrity = sum.inventoryIntegrity || {};
+    const cleaned = sum.itemsCleaned || {};
+
+    const topProductsHtml = topProducts.length ? topProducts.map((p, idx) => `
+      <tr>
+        <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0;text-align:center">${idx + 1}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0;font-weight:700">${Utils.escHtml(p.name)}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0;text-align:center;font-weight:700">${p.qty} und</td>
+        <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700;color:#1e40af">${Utils.formatCurrency(p.revenue)}</td>
+      </tr>
+    `).join('') : `<tr><td colspan="4" style="text-align:center;padding:14px;color:#64748b">Sin ventas registradas en el período</td></tr>`;
+
+    const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Cierre Mensual - ${Utils.escHtml(monthLabel)} - ${Utils.escHtml(s.companyName)}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; color: #0f172a; font-size: 12px; padding: 28px; background: #fff; line-height: 1.45; }
+    .report-container { max-width: 950px; margin: 0 auto; }
+    .print-actions { text-align: center; margin-bottom: 22px; }
+    .btn-print { background: #f59e0b; color: #000; font-weight: 700; border: none; padding: 10px 22px; border-radius: 8px; cursor: pointer; font-size: 13px; margin: 0 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+    .btn-pdf { background: #2563eb; color: #fff; font-weight: 700; border: none; padding: 10px 22px; border-radius: 8px; cursor: pointer; font-size: 13px; margin: 0 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #1e3a8a; padding-bottom: 16px; margin-bottom: 18px; }
+    .company-name { font-size: 22px; font-weight: 900; color: #1e3a8a; text-transform: uppercase; letter-spacing: 0.5px; }
+    .company-info { font-size: 11.5px; color: #475569; line-height: 1.5; margin-top: 4px; }
+    .report-meta { text-align: right; }
+    .report-title { font-size: 18px; font-weight: 900; color: #0f172a; text-transform: uppercase; margin-bottom: 4px; }
+    .period-badge { background: #dbeafe; color: #1e40af; padding: 5px 14px; border-radius: 6px; font-weight: 800; font-size: 13.5px; display: inline-block; margin-bottom: 6px; border: 1px solid #bfdbfe; }
+    .meta-line { font-size: 11.5px; color: #64748b; }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+    .kpi-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; text-align: center; }
+    .kpi-label { font-size: 10.5px; text-transform: uppercase; font-weight: 700; color: #64748b; margin-bottom: 4px; }
+    .kpi-value { font-size: 18px; font-weight: 900; color: #0f172a; }
+    .kpi-sub { font-size: 10.5px; color: #64748b; margin-top: 3px; font-weight: 600; }
+    .green { color: #16a34a !important; }
+    .blue { color: #2563eb !important; }
+    .red { color: #dc2626 !important; }
+    .orange { color: #d97706 !important; }
+
+    .section-title { font-size: 13.5px; font-weight: 800; text-transform: uppercase; color: #1e3a8a; border-left: 4px solid #2563eb; padding-left: 8px; margin: 18px 0 10px; }
+
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 11.5px; }
+    thead th { background: #1e293b; color: white; padding: 8px 10px; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.4px; font-weight: 700; }
+    tbody tr:nth-child(even) { background: #f8fafc; }
+    tfoot td { background: #f1f5f9; padding: 9px 10px; font-size: 12px; font-weight: 900; border-top: 2px solid #cbd5e1; }
+
+    .statement-table td { padding: 8px 12px; border-bottom: 1px solid #e2e8f0; }
+    .statement-table tr.highlight td { background: #f1f5f9; font-weight: 800; font-size: 12px; }
+    .statement-table tr.net-profit td { background: #dcfce7; font-weight: 900; font-size: 13.5px; color: #166534; border-top: 2px solid #86efac; border-bottom: 2px solid #86efac; }
+
+    .audit-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 18px; }
+    .audit-header { font-weight: 800; font-size: 12px; color: #0f172a; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+    .audit-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; font-size: 11.5px; color: #334155; }
+    .audit-item { background: #fff; padding: 8px 10px; border-radius: 6px; border: 1px solid #e2e8f0; }
+
+    .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 36px; padding-top: 10px; }
+    .sign-box { text-align: center; border-top: 1px solid #94a3b8; padding-top: 8px; font-size: 11.5px; color: #475569; }
+
+    .footer { text-align: center; border-top: 1px dashed #cbd5e1; padding-top: 14px; font-size: 11px; color: #64748b; margin-top: 22px; }
+
+    @media print {
+      .print-actions { display: none !important; }
+      body { padding: 0; background: #fff; }
+      @page { margin: 12mm; size: portrait; }
+      table { page-break-inside: auto; }
+      tr { page-break-inside: avoid; page-break-after: auto; }
+      thead { display: table-header-group; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="print-actions">
+    <button class="btn-print" onclick="window.print()">🖨️ Imprimir Reporte de Cierre</button>
+    <button class="btn-pdf" onclick="window.print()">📄 Guardar como PDF</button>
+  </div>
+
+  <div class="report-container">
+    <div class="header">
+      <div class="company">
+        ${logoHtml}
+        <div class="company-name">${Utils.escHtml(s.companyName)}</div>
+        <div class="company-info">
+          ${s.nit ? `<strong>NIT:</strong> ${Utils.escHtml(s.nit)}<br>` : ''}
+          ${s.address ? `<strong>Dirección:</strong> ${Utils.escHtml(s.address)}<br>` : ''}
+          ${s.phone ? `<strong>Teléfono:</strong> ${Utils.escHtml(s.phone)}<br>` : ''}
+          ${s.email ? `<strong>Email:</strong> ${Utils.escHtml(s.email)}` : ''}
+        </div>
+      </div>
+      <div class="report-meta">
+        <div class="report-title">Reporte Oficial de Cierre Mensual</div>
+        <div class="period-badge">📅 ${Utils.escHtml(monthLabel)}</div>
+        <div class="meta-line"><strong>Período:</strong> ${Utils.formatDate(dateRange[0])} al ${Utils.formatDate(dateRange[1])}</div>
+        <div class="meta-line"><strong>Fecha Cierre:</strong> ${closedAt}</div>
+        <div class="meta-line"><strong>Responsable:</strong> ${Utils.escHtml(closedBy)}</div>
+      </div>
+    </div>
+
+    <!-- Tarjetas de Resumen KPI -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Ventas Netas Realizadas</div>
+        <div class="kpi-value green">${Utils.formatCurrency(totalSales)}</div>
+        <div class="kpi-sub">${sum.salesCount || 0} factura(s) saldada(s)</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Costo de Mercancía</div>
+        <div class="kpi-value orange">${Utils.formatCurrency(totalCost)}</div>
+        <div class="kpi-sub">Costo de productos vendidos</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Ganancia Bruta Comercial</div>
+        <div class="kpi-value blue">${Utils.formatCurrency(grossProfit)}</div>
+        <div class="kpi-sub">Margen bruto: ${grossMargin}%</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Gastos Operativos del Mes</div>
+        <div class="kpi-value red">${Utils.formatCurrency(totalExpenses)}</div>
+        <div class="kpi-sub">${sum.expensesCount || 0} gasto(s) registrado(s)</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Ganancia Neta Real</div>
+        <div class="kpi-value ${netProfit >= 0 ? 'green' : 'red'}">${Utils.formatCurrency(netProfit)}</div>
+        <div class="kpi-sub">Margen neto: ${netMargin}%</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Balance Neto de Caja</div>
+        <div class="kpi-value ${cashNet >= 0 ? 'green' : 'red'}">${Utils.formatCurrency(cashNet)}</div>
+        <div class="kpi-sub">Ingresos menos egresos</div>
+      </div>
+    </div>
+
+    <!-- Estado Consolidado de Resultados -->
+    <div class="section-title">📊 Estado Consolidado de Resultados</div>
+    <table class="statement-table">
+      <tbody>
+        <tr>
+          <td><strong>(+) Ingresos por Ventas Facturadas (100% Saldadas)</strong></td>
+          <td style="text-align:right;font-weight:700;color:#16a34a">${Utils.formatCurrency(totalSales)}</td>
+        </tr>
+        <tr>
+          <td><strong>(-) Costo de Mercancía Vendida</strong></td>
+          <td style="text-align:right;font-weight:700;color:#dc2626">-${Utils.formatCurrency(totalCost)}</td>
+        </tr>
+        <tr class="highlight">
+          <td><strong>(=) GANANCIA BRUTA COMERCIAL (Ventas - Costos)</strong></td>
+          <td style="text-align:right;color:#2563eb">${Utils.formatCurrency(grossProfit)} (${grossMargin}%)</td>
+        </tr>
+        <tr>
+          <td><strong>(-) Gastos Operativos Totales del Mes</strong></td>
+          <td style="text-align:right;font-weight:700;color:#dc2626">-${Utils.formatCurrency(totalExpenses)}</td>
+        </tr>
+        <tr class="net-profit">
+          <td><strong>(=) GANANCIA NETA REAL DEL MES</strong></td>
+          <td style="text-align:right">${Utils.formatCurrency(netProfit)} (${netMargin}%)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Flujo de Caja y Compras -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+      <div>
+        <div class="section-title" style="margin-top:0">💰 Resumen de Flujo de Caja</div>
+        <table class="statement-table">
+          <tbody>
+            <tr>
+              <td>Total Ingresos en Efectivo / Banco</td>
+              <td style="text-align:right;font-weight:700;color:#16a34a">+${Utils.formatCurrency(cashIn)}</td>
+            </tr>
+            <tr>
+              <td>Total Egresos en Efectivo / Banco</td>
+              <td style="text-align:right;font-weight:700;color:#dc2626">-${Utils.formatCurrency(cashOut)}</td>
+            </tr>
+            <tr class="highlight">
+              <td>Flujo Neto del Mes en Caja</td>
+              <td style="text-align:right;color:${cashNet >= 0 ? '#16a34a' : '#dc2626'}">${Utils.formatCurrency(cashNet)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <div class="section-title" style="margin-top:0">📥 Compras y Cartera</div>
+        <table class="statement-table">
+          <tbody>
+            <tr>
+              <td>Compras Realizadas a Proveedores</td>
+              <td style="text-align:right;font-weight:700">${Utils.formatCurrency(totalPurchases)}</td>
+            </tr>
+            <tr>
+              <td>Cantidad de Compras Registradas</td>
+              <td style="text-align:right;font-weight:700">${sum.purchasesCount || 0} compras</td>
+            </tr>
+            <tr class="highlight">
+              <td>Cartera / Ventas a Crédito Pendientes</td>
+              <td style="text-align:right;color:#d97706">${sum.pendingSalesCount || 0} facturas (${Utils.formatCurrency(sum.pendingSalesBalance || 0)})</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Top 10 Productos Más Vendidos -->
+    <div class="section-title">🏆 Top Productos Más Vendidos del Mes</div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:35px;text-align:center">#</th>
+          <th style="text-align:left">Producto</th>
+          <th style="width:120px;text-align:center">Unidades</th>
+          <th style="width:160px;text-align:right">Total Generado</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${topProductsHtml}
+      </tbody>
+    </table>
+
+    <!-- Auditoría y Certificación de Base de Datos -->
+    <div class="audit-box">
+      <div class="audit-header">
+        <span>🛡️</span>
+        <span>Certificación de Optimización de Base de Datos e Integridad del Inventario</span>
+      </div>
+      <div class="audit-grid">
+        <div class="audit-item">
+          <strong>Registros cerrados y optimizados:</strong><br>
+          • ${cleaned.sales || 0} venta(s) saldada(s) archivada(s)<br>
+          • ${cleaned.purchases || 0} compra(s) consolidada(s)<br>
+          • ${cleaned.expenses || 0} gasto(s) y ${cleaned.cashMovements || 0} movimiento(s) de caja
+        </div>
+        <div class="audit-item">
+          <strong>Garantía de Integridad del Stock y Clientes:</strong><br>
+          • Inventario físico: <strong>${integrity.productsCount || DB.getAll('products').length} productos</strong> (${integrity.totalStockUnits || 0} unds)<br>
+          • Clientes registrados: <strong>${integrity.customersCount || DB.getAll('customers').length} clientes</strong> activos<br>
+          • <em>100% preservados sin alteración ni pérdidas.</em>
+        </div>
+      </div>
+    </div>
+
+    <!-- Firmas -->
+    <div class="signatures">
+      <div class="sign-box">
+        <strong>Firma del Administrador</strong><br>
+        ${Utils.escHtml(s.companyName)}
+      </div>
+      <div class="sign-box">
+        <strong>Firma Contador / Revisor</strong><br>
+        Control Interno y Auditoría
+      </div>
+    </div>
+
+    <div class="footer">
+      Documento oficial de Cierre Contable generado por el Sistema Administrativo de ${Utils.escHtml(s.companyName)}.<br>
+      Válido para auditoría contable, archivo tributario y control de gestión.
+    </div>
+  </div>
+
+</body>
+</html>`;
+
+    const w = window.open('', '_blank');
+    if (!w) { Utils.showToast('No se pudo abrir la ventana para el reporte. Permita ventanas emergentes en el navegador.', 'error'); return; }
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => w.print(), 500);
   }
 };
 

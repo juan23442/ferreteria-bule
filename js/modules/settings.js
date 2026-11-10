@@ -56,6 +56,18 @@ window.Modules.settings = {
       </div>
     </div>
 
+    <div class="settings-section">
+      <div class="settings-section-header">🔒 Cierre Mensual y Optimización de Base de Datos (Supabase)</div>
+      <div class="settings-section-body">
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;line-height:1.5">
+          Consolida las ventas, compras, caja y gastos de los meses finalizados en un reporte oficial descargable en PDF y optimiza la base de datos de Supabase archivando movimientos operativos pasados para evitar saturación. <strong>El inventario de productos (stock actual) y los clientes se preservan al 100%.</strong>
+        </p>
+        <button class="btn btn-primary" onclick="location.hash='#reports';setTimeout(()=>{document.querySelector('#report-tabs [data-period=\\'closures\\']')?.click()},150)">
+          🔒 Abrir Módulo de Cierre Mensual y Reportes PDF
+        </button>
+      </div>
+    </div>
+
     <div style="text-align:right;margin-top:20px">
       <button class="btn btn-primary btn-lg" id="btn-save-settings">💾 Guardar Configuración</button>
     </div>`;

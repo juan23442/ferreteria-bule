@@ -145,6 +145,46 @@ const Utils = {
     return this.dateInRange(settledDate, from, to);
   },
 
+  // Obtiene el nombre del mes legible (ej: '2026-10' -> 'Octubre de 2026')
+  getMonthLabel(yearMonth) {
+    if (!yearMonth) return '';
+    const parts = String(yearMonth).split('-');
+    if (parts.length < 2) return yearMonth;
+    const y = parts[0];
+    const m = parseInt(parts[1], 10);
+    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    const mName = monthNames[m - 1] || parts[1];
+    return `${mName} de ${y}`;
+  },
+
+  // Obtiene el rango exacto de fechas [inicio, fin] de un mes YYYY-MM
+  getMonthDateRange(yearMonth) {
+    if (!yearMonth) return [this.today(), this.today()];
+    const [y, m] = yearMonth.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    const pad = (n) => String(n).padStart(2, '0');
+    return [`${y}-${pad(m)}-01`, `${y}-${pad(m)}-${pad(lastDay)}`];
+  },
+
+  // Obtiene el mes calendario anterior YYYY-MM
+  getPreviousMonth(yearMonth = null) {
+    const base = yearMonth || this.today().slice(0, 7);
+    const [y, m] = base.split('-').map(Number);
+    const d = new Date(y, m - 1, 1);
+    d.setMonth(d.getMonth() - 1);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  },
+
+  // Obtiene el día calendario siguiente YYYY-MM-DD
+  getNextDay(dateStr) {
+    if (!dateStr) return this.today();
+    const parts = dateStr.split('-').map(Number);
+    const d = new Date(parts[0], parts[1] - 1, parts[2] + 1);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  },
+
   generateId(prefix = 'id') {
     return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`;
   },

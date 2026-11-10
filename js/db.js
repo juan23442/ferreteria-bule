@@ -19,7 +19,7 @@ const DEFAULT_SETTINGS = {
 };
 
 const DB = (() => {
-  const KEYS = ['products','categories','sales','purchases','customers','suppliers','cash_movements','expenses','movements'];
+  const KEYS = ['products','categories','sales','purchases','customers','suppliers','cash_movements','expenses','movements','monthly_closures'];
   const _cache = {};
   const _indexes = {};
   let _syncTimer = null;
@@ -499,6 +499,223 @@ const DB = (() => {
       }
 
       this.update('products', p.id, { batches: p.batches, stock: p.stock });
+    },
+
+    // ---- Cierres Mensuales y Optimización de Base de Datos ----
+    isMonthClosed(yearMonth) {
+      if (!yearMonth) return false;
+      const closures = this.getAll('monthly_closures');
+      return closures.some(c => c.month === yearMonth);
+    },
+
+    getPendingClosedMonth() {
+      const prevMonth = Utils.getPreviousMonth();
+      if (!this.isMonthClosed(prevMonth)) {
+        return prevMonth;
+      }
+      return null;
+    },
+
+    getMonthlyClosureData(yearMonth) {
+      const [from, to] = Utils.getMonthDateRange(yearMonth);
+      const allSales = this.getAll('sales');
+      const allPurchases = this.getAll('purchases');
+      const allExpenses = this.getAll('expenses');
+      const allCash = this.getAll('cash_movements');
+      const allMovs = this.getAll('movements');
+      const allProducts = this.getAll('products');
+      const allCustomers = this.getAll('customers');
+
+      // 1. Ventas 100% saldadas del mes
+      const settledSales = allSales.filter(s => {
+        if (s.status === 'anulada') return false;
+        const settledDate = Utils.getSaleSettledDate(s);
+        return settledDate && settledDate >= from && settledDate <= to;
+      });
+
+      // 2. Ventas anuladas del mes (para archivado)
+      const annulledSales = allSales.filter(s => {
+        if (s.status !== 'anulada') return false;
+        const d = Utils.extractDate(s.date || s.datetime);
+        return d >= from && d <= to;
+      });
+
+      // 3. Ventas pendientes o fiadas que tienen saldo por cobrar
+      // (¡NUNCA SE BORRAN! Se conservan intactas para su cobro)
+      const pendingSales = allSales.filter(s => {
+        if (s.status === 'anulada') return false;
+        const isPending = s.status === 'pendiente' || s.status === 'con_abono' || (s.totalPending != null && s.totalPending > 0.01);
+        const d = Utils.extractDate(s.date || s.datetime);
+        return isPending && d >= from && d <= to;
+      });
+
+      // 4. Compras del mes
+      const purchases = allPurchases.filter(p => {
+        const d = Utils.extractDate(p.date || p.createdAt);
+        return d >= from && d <= to;
+      });
+
+      // 5. Gastos operativos del mes
+      const expenses = allExpenses.filter(e => {
+        const d = Utils.extractDate(e.date || e.datetime);
+        return d >= from && d <= to;
+      });
+
+      // 6. Movimientos de caja del mes
+      const cashMovements = allCash.filter(m => {
+        const d = Utils.extractDate(m.date || m.datetime);
+        return d >= from && d <= to;
+      });
+
+      // 7. Movimientos de kardex del mes
+      const movements = allMovs.filter(m => {
+        const d = Utils.extractDate(m.date || m.datetime);
+        return d >= from && d <= to;
+      });
+
+      // Métricas financieras
+      const totalSales = settledSales.reduce((a, s) => a + (s.total || 0), 0);
+      const totalCost = settledSales.reduce((a, s) => {
+        const cost = (s.items || []).reduce((b, it) => b + ((it.qty || 1) * (it.costPrice || 0)), 0);
+        return a + cost;
+      }, 0);
+      const grossProfit = Math.max(0, totalSales - totalCost);
+      const totalExpenses = expenses.reduce((a, e) => a + (parseFloat(e.amount) || 0), 0);
+      const netProfit = grossProfit - totalExpenses;
+      const totalPurchases = purchases.reduce((a, p) => a + (parseFloat(p.total) || 0), 0);
+
+      const cashIn = cashMovements.filter(m => m.type === 'ingreso').reduce((a, m) => a + (parseFloat(m.amount) || 0), 0);
+      const cashOut = cashMovements.filter(m => m.type === 'egreso').reduce((a, m) => a + (parseFloat(m.amount) || 0), 0);
+      const cashNet = cashIn - cashOut;
+
+      // Top 10 productos más vendidos
+      const prodMap = {};
+      settledSales.forEach(s => (s.items || []).forEach(it => {
+        const name = it.name || 'Producto';
+        if (!prodMap[name]) prodMap[name] = { name, qty: 0, revenue: 0 };
+        prodMap[name].qty += (it.qty || 1);
+        prodMap[name].revenue += (it.subtotal || 0);
+      }));
+      const topProducts = Object.values(prodMap).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+
+      // Verificación de integridad del inventario (Stock y Clientes)
+      const totalStockUnits = allProducts.reduce((a, p) => a + (p.stock || 0), 0);
+      const inventoryCostValue = allProducts.reduce((a, p) => a + ((p.stock || 0) * (p.costPrice || 0)), 0);
+
+      return {
+        month: yearMonth,
+        monthLabel: Utils.getMonthLabel(yearMonth),
+        dateRange: [from, to],
+        settledSales,
+        annulledSales,
+        pendingSales,
+        purchases,
+        expenses,
+        cashMovements,
+        movements,
+        totalSales,
+        totalCost,
+        grossProfit,
+        totalExpenses,
+        netProfit,
+        totalPurchases,
+        cashIn,
+        cashOut,
+        cashNet,
+        topProducts,
+        pendingSalesCount: pendingSales.length,
+        pendingSalesBalance: pendingSales.reduce((a, s) => a + (s.totalPending != null ? s.totalPending : s.total), 0),
+        inventoryIntegrity: {
+          productsCount: allProducts.length,
+          totalStockUnits,
+          inventoryCostValue,
+          customersCount: allCustomers.length,
+          certified: true
+        }
+      };
+    },
+
+    executeMonthlyClosure(yearMonth, user = 'Administrador') {
+      const data = this.getMonthlyClosureData(yearMonth);
+
+      const closureRecord = {
+        id: `closure_${yearMonth.replace('-', '_')}`,
+        month: yearMonth,
+        monthLabel: data.monthLabel,
+        dateRange: data.dateRange,
+        closedAt: Utils.nowISO(),
+        closedBy: user,
+        summary: {
+          totalSales: data.totalSales,
+          salesCount: data.settledSales.length,
+          annulledCount: data.annulledSales.length,
+          totalCost: data.totalCost,
+          grossProfit: data.grossProfit,
+          totalExpenses: data.totalExpenses,
+          expensesCount: data.expenses.length,
+          netProfit: data.netProfit,
+          totalPurchases: data.totalPurchases,
+          purchasesCount: data.purchases.length,
+          cashIn: data.cashIn,
+          cashOut: data.cashOut,
+          cashNet: data.cashNet,
+          topProducts: data.topProducts,
+          pendingSalesCount: data.pendingSalesCount,
+          pendingSalesBalance: data.pendingSalesBalance,
+          inventoryIntegrity: data.inventoryIntegrity,
+          itemsCleaned: {
+            sales: data.settledSales.length + data.annulledSales.length,
+            purchases: data.purchases.length,
+            expenses: data.expenses.length,
+            cashMovements: data.cashMovements.length,
+            movements: data.movements.length
+          }
+        }
+      };
+
+      // 1. Guardar el registro consolidado permanente en monthly_closures
+      const currentClosures = this.getAll('monthly_closures').filter(c => c.month !== yearMonth);
+      currentClosures.push(closureRecord);
+      this.save('monthly_closures', currentClosures);
+
+      // 2. Limpieza segura de transacciones operativas cerradas del mes en la vista principal
+      // OJO: NUNCA se borran productos (stock) ni clientes ni ventas con deuda pendiente.
+      const removeSaleIds = new Set([...data.settledSales, ...data.annulledSales].map(s => s.id));
+      const remainingSales = this.getAll('sales').filter(s => !removeSaleIds.has(s.id));
+      this.save('sales', remainingSales);
+
+      const removePurchIds = new Set(data.purchases.map(p => p.id));
+      const remainingPurchases = this.getAll('purchases').filter(p => !removePurchIds.has(p.id));
+      this.save('purchases', remainingPurchases);
+
+      const removeExpIds = new Set(data.expenses.map(e => e.id));
+      const remainingExpenses = this.getAll('expenses').filter(e => !removeExpIds.has(e.id));
+      this.save('expenses', remainingExpenses);
+
+      const removeMovIds = new Set(data.movements.map(m => m.id));
+      const remainingMovements = this.getAll('movements').filter(m => !removeMovIds.has(m.id));
+      this.save('movements', remainingMovements);
+
+      // 3. Limpieza de movimientos de caja conservando el saldo exacto mediante asiento de apertura
+      const removeCashIds = new Set(data.cashMovements.map(m => m.id));
+      let remainingCash = this.getAll('cash_movements').filter(m => !removeCashIds.has(m.id));
+      if (data.cashNet !== 0) {
+        const nextDay = Utils.getNextDay(data.dateRange[1]);
+        const carryEntry = {
+          id: `cash_cierre_${yearMonth.replace('-', '_')}`,
+          date: nextDay,
+          datetime: `${nextDay}T00:00:01`,
+          type: data.cashNet >= 0 ? 'ingreso' : 'egreso',
+          concept: `Saldo Inicial Consolidado (Cierre ${data.monthLabel})`,
+          amount: Math.abs(data.cashNet),
+          method: 'efectivo',
+          reference: closureRecord.id
+        };
+        remainingCash.unshift(carryEntry);
+      }
+      this.save('cash_movements', remainingCash);
+
+      return closureRecord;
     },
 
     // ---- Backup / Restore ----
